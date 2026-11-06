@@ -16,6 +16,11 @@ const Rendu = {
   _mesureur: null,
   _cacheMesures: new Map(),
 
+  /* Aperçus des retouches en cours : numéro d'image → image retouchée.
+     Seulement à l'écran ; jamais dans le fichier exporté tant que la
+     retouche n'est pas validée. */
+  remplacements: new Map(),
+
   _ctxMesure() {
     if (!this._mesureur) this._mesureur = document.createElement('canvas').getContext('2d');
     return this._mesureur;
@@ -83,7 +88,9 @@ const Rendu = {
 
     if (c.type === 'image') {
       const largeurEcran = c.largeur * c.echelle * (options.zoom || 1);
-      const image = options.ecran ? Ressources.pourEcran(c.ressource, largeurEcran) : (Ressources.obtenir(c.ressource) || {}).image;
+      // Pendant une retouche, l'écran montre l'aperçu (pas encore validé)
+      const apercu = options.ecran && this.remplacements.get(c.ressource);
+      const image = apercu || (options.ecran ? Ressources.pourEcran(c.ressource, largeurEcran) : (Ressources.obtenir(c.ressource) || {}).image);
       if (image) {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';

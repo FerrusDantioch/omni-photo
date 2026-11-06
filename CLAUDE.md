@@ -8,7 +8,7 @@ lui répondre en français, expliquer les commandes Git une par une.
 ## Construction en trois étapes (arrêt et retour de l'auteur entre chaque)
 
 1 base, import/export, calques, texte, images, annuler ✅ (0.1.0) ·
-2 yeux rouges, découpe manuelle (zoom) · 3 détourage IA (U²-Netp + ONNX Runtime
+2 yeux rouges, découpe manuelle (zoom) ✅ (0.2.0) · 3 détourage IA (U²-Netp + ONNX Runtime
 Web, choisis par l'auteur), retouche pinceau/gomme, nouvel arrière-plan.
 
 ## ⚠️ Contraintes à préserver
@@ -48,9 +48,21 @@ Web, choisis par l'auteur), retouche pinceau/gomme, nouvel arrière-plan.
   un bouton. `nettoyer()` libère les ressources que plus aucun état n'utilise.
 - `Rendu.dessinerMontage()` sert à l'écran ET à l'export (ne jamais dessiner
   autrement à l'export).
-- `Editeur.outil` : crochet prévu pour les étapes 2-3 (yeux rouges, découpe,
-  pinceau) : `{ appui, mouvement, relache, dessiner }` reçoit les doigts à la
-  place des gestes de calque. `ecranVersMontage()` / `montageVersEcran()`.
+- `Editeur.outil` (retouches.js) : `OutilYeux`, `OutilDecoupe` (et le pinceau
+  de l'étape 3). Interface : `panneau` (id du `.panneau-outil`), `commencer(c)`,
+  `appui(p)` → vrai si l'outil prend le doigt (sinon le doigt déplace la vue),
+  `mouvement`, `relache`, `interrompre` (2e doigt = zoom, trait oublié),
+  `toucher(p)` (simple toucher), `dessiner(ctx)` (pixels d'écran),
+  `aDuTravail()`, `retirerDernier()` (« Annuler » du haut), `fermer()`,
+  `majPanneau()`. Deux doigts = toujours zoom/déplacement de la vue.
+  `Retouche.ouvrir/valider/verifierLibre` ; aperçu par `Rendu.remplacements`
+  (écran seulement). Coordonnées : `Editeur.ecranVersCalque()` /
+  `calqueVersEcran()` (pixels de l'image du calque, rotation et miroir compris).
+- Yeux rouges (`corrigerYeuxRouges`) : rouge = R / ((V+B)/2 + 8) ≥ 1,45 et
+  R > 45 ; tache reliée au centre (graines dans 55 % du rayon, croissance par
+  seuil faible) ; masque adouci 3×3 ; R ramené à min(R, (V+B)/2) × 0,85.
+- Découpe : contour en pixels de l'image, `destination-in` / `destination-out`,
+  bord doux par `filter: blur()`. L'image garde sa taille (calque inchangé).
 - Limites (`LIMITES`) : photo 4 096 px de côté, calque 2 048 px, 200 Mo,
   270 Mpx. Erreurs lisibles : `ErreurPhoto` + `MESSAGES_PHOTO`.
 - Sauvegarde auto (`sauvegarde.js`) : tiroir `etat` (clé `courant`) + tiroir
@@ -67,7 +79,7 @@ Web, choisis par l'auteur), retouche pinceau/gomme, nouvel arrière-plan.
 
 ## Tests
 
-`node tests/tester.js` (Playwright + Chromium ; 83 vérifications) ;
+`node tests/tester.js` (Playwright + Chromium ; 126 vérifications) ;
 `RAPIDE=1` saute les contrôles communs. `tests/outils.js` = boîte à outils
 commune à plusieurs applications de l'Omni-système.
 Servir le dossier parent pour reproduire l'adresse de GitHub Pages

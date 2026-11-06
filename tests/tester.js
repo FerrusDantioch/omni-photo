@@ -83,6 +83,46 @@ const ecranDe = (p, id) => p.evaluate((id) => {
   return Editeur.montageVersEcran(c.x, c.y);
 }, id);
 
+
+/* Un faux visage : peau, deux pupilles rouges avec un reflet blanc, et
+   des lèvres rouges (qui ne doivent PAS être touchées). 600 × 400. */
+async function fabriquerVisage(p) {
+  const b64 = await p.evaluate(async () => {
+    const c = document.createElement('canvas');
+    c.width = 600; c.height = 400;
+    const x = c.getContext('2d');
+    x.fillStyle = '#d9a07a'; x.fillRect(0, 0, 600, 400);                      // peau
+    for (const cx of [200, 400]) {
+      x.fillStyle = '#f2ede6'; x.beginPath(); x.ellipse(cx, 200, 45, 28, 0, 0, 7); x.fill();   // blanc de l'œil
+      x.fillStyle = '#4a7a5a'; x.beginPath(); x.arc(cx, 200, 26, 0, 7); x.fill();              // iris vert
+      x.fillStyle = '#c41a1a'; x.beginPath(); x.arc(cx, 200, 18, 0, 7); x.fill();              // pupille rouge
+      x.fillStyle = '#fbfbf8'; x.beginPath(); x.arc(cx + 6, 194, 4, 0, 7); x.fill();           // reflet
+    }
+    x.fillStyle = '#c03030'; x.beginPath(); x.ellipse(300, 330, 60, 22, 0, 0, 7); x.fill();     // lèvres
+    const blob = await new Promise((ok) => c.toBlob(ok, 'image/png'));
+    const t = new Uint8Array(await blob.arrayBuffer());
+    let s = ''; for (const v of t) s += String.fromCharCode(v);
+    return btoa(s);
+  });
+  return Buffer.from(b64, 'base64');
+}
+
+/* La couleur d'un pixel de l'image d'un calque (ou de l'aperçu en cours). */
+const pixel = (p, id, x, y, apercu = false) => p.evaluate(({ id, x, y, apercu }) => {
+  const image = apercu ? Rendu.remplacements.get(id) : Ressources.obtenir(id).image;
+  const c = new OffscreenCanvas(1, 1);
+  const ctx = c.getContext('2d');
+  ctx.drawImage(image, -x, -y);
+  return [...ctx.getImageData(0, 0, 1, 1).data];
+}, { id, x, y, apercu });
+
+const versEcran = (p, x, y) => p.evaluate(({ x, y }) => {
+  const c = Retouche.cible() || Montage.doc.calques[0];
+  return Editeur.calqueVersEcran(Editeur.outil ? Editeur.outil.calque : c, x, y);
+}, { x, y });
+
+const toucherEcran = (p, e) => doigts(p, [['pointerdown', 1, e.x, e.y], ['pointerup', 1, e.x, e.y]]);
+
 lancer('Omni-Photo', async () => {
   if (!process.env.RAPIDE) await controlesCommuns({ serviceWorker: 'sw.js' });
 
@@ -397,6 +437,159 @@ lancer('Omni-Photo', async () => {
     await p.evaluate(() => { HTMLCanvasElement.prototype.toBlob = window._toBlob; });
     await p.click('[data-action="fermer-message"]');
     verifier((await etat(p)).doc.largeur === 4096, 'le montage est toujours là');
+  });
+
+
+  // ---------------- Étape 2 : yeux rouges et découpe ----------------
+  await section('Yeux rouges', async () => {
+    const t = await nouvellePage();
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'visage.png', mimeType: 'image/png', buffer: await fabriquerVisage(p) });
+    await attendreFin(p);
+    const photo = (await etat(p)).doc.calques[0];
+    await p.click('[data-action="outil-yeux"]');
+    verifier(await p.evaluate(() => Editeur.outil === OutilYeux) && !(await p.$eval('#outil-yeux', (el) => el.hidden)), 'l’outil s’ouvre avec son panneau');
+    verifier((await texte(p, '#outil-yeux .nom-cible')).includes('Photo'), 'il dit quelle image est retouchée');
+    verifier(await p.$eval('[data-action="yeux-valider"]', (b) => b.disabled), '« Valider » attend une correction');
+
+    // Zone réglée un peu plus grande que la pupille
+    await p.evaluate(() => { const r = document.querySelector('#y-taille'); r.value = 40; r.dispatchEvent(new Event('input', { bubbles: true })); });
+    await toucherEcran(p, await versEcran(p, 200, 200));
+    let n = await p.evaluate(() => OutilYeux.corrections.length);
+    verifier(n === 1, 'toucher l’œil gauche : une correction', n);
+    let px = await pixel(p, photo.ressource, 192, 206, true);
+    verifier(px[0] < 60 && Math.abs(px[0] - px[1]) < 20, 'aperçu : la pupille devient sombre et naturelle', px);
+    px = await pixel(p, photo.ressource, 192, 206);
+    verifier(px[0] > 180, 'la vraie image n’est pas encore touchée', px);
+    px = await pixel(p, photo.ressource, 206, 194, true);
+    verifier(px[0] > 220 && px[1] > 220, 'le reflet blanc de l’œil est gardé', px);
+    px = await pixel(p, photo.ressource, 200 - 22, 200, true);
+    verifier(px[1] > 100 && px[0] < 120, 'l’iris vert n’est pas abîmé', px);
+    px = await pixel(p, photo.ressource, 200, 240, true);
+    verifier(Math.abs(px[0] - 217) < 4, 'la peau autour n’est pas touchée', px);
+
+    // Toucher la peau : rien à corriger
+    await toucherEcran(p, await versEcran(p, 300, 80));
+    verifier((await p.evaluate(() => OutilYeux.corrections.length)) === 1 && (await texte(p, '#message-texte')).includes('Pas de rouge'),
+      'toucher sans rouge : message, rien n’est changé');
+
+    // Avant / après
+    await p.click('[data-action="yeux-comparer"]');
+    verifier(await p.evaluate(() => Rendu.remplacements.size === 0), '« Voir l’original » montre la photo d’avant');
+    await p.click('[data-action="yeux-comparer"]');
+    verifier(await p.evaluate(() => Rendu.remplacements.size === 1), '« Voir la correction » remontre l’aperçu');
+
+    // Zoom à deux doigts, puis l'autre œil (la précision au zoom)
+    const avant = await p.evaluate(() => Editeur.vue.e);
+    await doigts(p, [['pointerdown', 1, 150, 200], ['pointerdown', 2, 230, 200], ['pointermove', 2, 330, 200], ['pointerup', 2, 330, 200], ['pointerup', 1, 150, 200]]);
+    const zoom = await p.evaluate(() => Editeur.vue.e);
+    verifier(zoom > avant * 2, 'deux doigts zooment pendant la retouche', [avant, zoom]);
+    verifier((await p.evaluate(() => OutilYeux.corrections.length)) === 1, 'zoomer n’ajoute pas de correction');
+    await p.click('[data-action="voir-tout"]').catch(() => {});
+    await p.evaluate(() => { const r = document.querySelector('#y-taille'); r.value = 80; r.dispatchEvent(new Event('input', { bubbles: true })); });
+    await doigts(p, [['pointerdown', 1, 200, 300], ['pointermove', 1, 260, 320], ['pointerup', 1, 260, 320]]);   // glisser = déplacer la vue
+    verifier((await p.evaluate(() => OutilYeux.corrections.length)) === 1, 'glisser un doigt déplace la vue sans corriger');
+    await toucherEcran(p, await versEcran(p, 400, 200));
+    verifier((await p.evaluate(() => OutilYeux.corrections.length)) === 2, 'l’œil droit est corrigé aussi (zoomé)');
+    await p.click('[data-action="yeux-retirer"]');
+    verifier((await p.evaluate(() => OutilYeux.corrections.length)) === 1, '« Retirer le dernier » enlève le dernier œil');
+    px = await pixel(p, photo.ressource, 392, 206, true);
+    verifier(px[0] > 180, 'l’œil droit est redevenu comme avant', px);
+    await toucherEcran(p, await versEcran(p, 400, 200));
+    await p.click('[data-action="annuler"]');
+    verifier((await p.evaluate(() => OutilYeux.corrections.length)) === 1 && (await etat(p)).passe === 0, '« Annuler » en haut retire aussi le dernier œil');
+    await toucherEcran(p, await versEcran(p, 400, 200));
+
+    // Export bloqué tant que ce n'est pas validé
+    await p.click('[data-action="ouvrir-export"]');
+    verifier(!(await p.$eval('#fenetre-export', (d) => d.open)) && (await texte(p, '#message-texte')).includes('Valider'), 'exporter demande d’abord de valider la retouche');
+    await p.click('[data-action="fermer-message"]');
+
+    await p.click('[data-action="yeux-valider"]');
+    let e = await etat(p);
+    const corrigee = e.doc.calques[0].ressource;
+    verifier(corrigee !== photo.ressource && e.passe === 1 && !(await p.evaluate(() => Editeur.outil)), 'valider : nouvelle image, une étape d’« Annuler », outil fermé');
+    for (const cx of [192, 392]) {
+      px = await pixel(p, corrigee, cx, 206);
+      verifier(px[0] < 60, `pupille corrigée dans l’image (x=${cx})`, px);
+    }
+    px = await pixel(p, corrigee, 300, 330);
+    verifier(px[0] > 180 && px[1] < 70, 'les lèvres rouges ne sont pas touchées', px);
+    await p.click('[data-action="annuler"]');
+    verifier((await etat(p)).doc.calques[0].ressource === photo.ressource, '« Annuler » rend les yeux d’origine');
+    await p.click('[data-action="retablir"]');
+    verifier((await etat(p)).doc.calques[0].ressource === corrigee, '« Rétablir » remet la correction');
+
+    // ---- Découpe par points (photo de fond) ----
+    await p.click('[data-action="outil-decoupe"]');
+    await p.click('label.choix:has(input[value="points"])');
+    for (const [x, y] of [[100, 100], [500, 100], [500, 300], [100, 300]]) await toucherEcran(p, await versEcran(p, x, y));
+    let pts = await p.evaluate(() => OutilDecoupe.points.map((q) => [Math.round(q.x), Math.round(q.y)]));
+    verifier(pts.length === 4 && Math.abs(pts[2][0] - 500) <= 2 && Math.abs(pts[2][1] - 300) <= 2, 'quatre points posés au bon endroit', pts);
+    // Glisser le 3e point pour le corriger
+    const p3 = await versEcran(p, 500, 300), cible3 = await versEcran(p, 520, 340);
+    await doigts(p, [['pointerdown', 1, p3.x, p3.y], ['pointermove', 1, (p3.x + cible3.x) / 2, (p3.y + cible3.y) / 2], ['pointermove', 1, cible3.x, cible3.y], ['pointerup', 1, cible3.x, cible3.y]]);
+    pts = await p.evaluate(() => OutilDecoupe.points.map((q) => [Math.round(q.x), Math.round(q.y)]));
+    verifier(pts.length === 4 && Math.abs(pts[2][0] - 520) <= 3 && Math.abs(pts[2][1] - 340) <= 3, 'un point se déplace en le faisant glisser', pts);
+    await p.click('[data-action="decoupe-apercu"]');
+    verifier(!(await p.$eval('#d-resultat', (el) => el.hidden)) && (await p.evaluate(() => Rendu.remplacements.size)) === 1, 'aperçu de la découpe avant validation');
+    px = await pixel(p, corrigee, 50, 50, true);
+    verifier(px[3] === 0, 'aperçu : l’extérieur devient transparent', px);
+    await p.click('[data-action="decoupe-reprendre"]');
+    verifier((await p.evaluate(() => OutilDecoupe.points.length)) === 4 && (await p.evaluate(() => Rendu.remplacements.size)) === 0, '« Reprendre le tracé » garde les points');
+    await p.click('[data-action="decoupe-apercu"]');
+    await p.click('[data-action="decoupe-valider"]');
+    e = await etat(p);
+    const decoupee = e.doc.calques[0].ressource;
+    px = await pixel(p, decoupee, 50, 50);
+    verifier(px[3] === 0, 'dehors : transparent', px);
+    px = await pixel(p, decoupee, 300, 200);
+    verifier(px[3] === 255, 'dedans : gardé', px);
+    verifier((await texte(p, '#message-texte')).includes('PNG'), 'le message conseille le PNG pour la transparence');
+    await p.click('[data-action="annuler"]');
+    verifier((await etat(p)).doc.calques[0].ressource === corrigee, '« Annuler » annule la découpe');
+
+    // ---- Tracé libre sur une image tournée et retournée, en gardant l'extérieur ----
+    await donnerFichier(p, '[data-action="ajouter-image"]', { name: 'carre.jpg', mimeType: 'image/jpeg', buffer: await fabriquerImage(p, 300, 300) });
+    await attendreFin(p);
+    const carre = (await etat(p)).doc.calques[1];
+    await p.evaluate((id) => Historique.action(() => Montage.modifier(id, { rotation: 30, miroirH: true, echelle: 1 })), carre.id);
+    await p.click('#retouches-calque [data-action="outil-decoupe"]');
+    verifier((await texte(p, '#outil-decoupe .nom-cible')).includes(carre.nom), 'découper depuis le calque choisi le prend pour cible', await texte(p, '#outil-decoupe .nom-cible'));
+    await p.click('label.choix:has(input[value="libre"])');
+    await p.click('label.choix:has(input[value="exterieur"])');
+    // Un 2e doigt pendant le tracé : ce bout de trait est oublié
+    const c0 = await versEcran(p, 150, 150);
+    await doigts(p, [['pointerdown', 1, c0.x, c0.y], ['pointermove', 1, c0.x + 10, c0.y], ['pointerdown', 2, c0.x + 80, c0.y],
+      ['pointermove', 2, c0.x + 100, c0.y], ['pointerup', 2, c0.x + 100, c0.y], ['pointerup', 1, c0.x + 10, c0.y]]);
+    verifier((await p.evaluate(() => OutilDecoupe.points.length)) === 0, 'un 2e doigt transforme le trait en zoom (trait oublié)');
+    await p.click('[data-action="voir-tout"]').catch(() => {});
+    // Un cercle de rayon 80 autour du centre de l'image, en deux traits
+    const cercle = [];
+    for (let i = 0; i <= 48; i++) cercle.push(await versEcran(p, 150 + 80 * Math.cos(i / 48 * 2 * Math.PI), 150 + 80 * Math.sin(i / 48 * 2 * Math.PI)));
+    const trait = (morceau) => [['pointerdown', 1, morceau[0].x, morceau[0].y], ...morceau.slice(1).map((q) => ['pointermove', 1, q.x, q.y]), ['pointerup', 1, morceau[morceau.length - 1].x, morceau[morceau.length - 1].y]];
+    await doigts(p, trait(cercle.slice(0, 25)));
+    await doigts(p, trait(cercle.slice(25)));
+    const nb = await p.evaluate(() => [OutilDecoupe.points.length, OutilDecoupe.traits.length]);
+    verifier(nb[0] > 20 && nb[1] === 2, 'le tracé reprend où il s’était arrêté (2 traits)', nb);
+    // Fermer avec un tracé en cours : deux appuis
+    await p.click('#outil-decoupe [data-action="outil-fermer"]');
+    verifier(await p.evaluate(() => Editeur.outil === OutilDecoupe), 'fermer avec un tracé en cours demande un 2e appui');
+    await p.waitForTimeout(4200);   // le bouton se désarme tout seul
+    await p.click('[data-action="decoupe-apercu"]');
+    await p.click('[data-action="decoupe-valider"]');
+    e = await etat(p);
+    const trou = e.doc.calques[1].ressource;
+    px = await pixel(p, trou, 150, 150);
+    verifier(px[3] === 0, 'garder l’extérieur : le centre est retiré', px);
+    px = await pixel(p, trou, 10, 10);
+    verifier(px[3] === 255, 'les coins sont gardés', px);
+    px = await pixel(p, trou, 150, 60);
+    verifier(px[3] === 255, 'juste hors du cercle : gardé (tracé juste malgré la rotation et le miroir)', px);
+    px = await pixel(p, trou, 150, 80);
+    verifier(px[3] === 0, 'juste dans le cercle : retiré', px);
+    await t.ctx.close();
   });
 
   await section('Page « À propos »', async () => {

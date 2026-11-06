@@ -10,7 +10,7 @@
 
 /* ⚠️ Numéro de version, affiché dans « À propos ». À changer à chaque
    version publiée, EN MÊME TEMPS que CACHE en haut de sw.js. */
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 
 
 /* ---------- 1. Les écrans ---------- */
@@ -21,12 +21,16 @@ function afficherVue(nom) {
   vueActive = nom;
   for (const v of $$('.vue')) v.hidden = v.dataset.vue !== nom;
   document.body.dataset.vue = nom;
-  if (nom === 'accueil') Accueil.majReprise();
+  if (nom === 'accueil') Accueil.majListe();
+  if (nom === 'apropos') APropos.maj();
   if (nom === 'editeur') {
     Editeur.redimensionner();
     Editeur.ajusterVue();
     Panneaux.majPanneau();
     Historique.majBoutons();
+    Guide.peutEtreMontrer();
+  } else {
+    Guide.terminerSiOuvert();
   }
   const titre = $(`.vue[data-vue="${nom}"] h1`);
   if (titre && nom !== 'editeur') titre.focus({ preventScroll: true });
@@ -59,95 +63,7 @@ window.addEventListener('popstate', () => {
 });
 
 
-/* ---------- 2. L'accueil et l'ouverture des photos ---------- */
-
-const Accueil = {
-  async majReprise() {
-    const date = await Sauvegarde.existe();
-    const bloc = $('#bloc-reprise');
-    bloc.hidden = !date;
-    if (date) {
-      $('#date-reprise').textContent = 'Modifié le ' + new Date(date).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' });
-    }
-  },
-
-  /* Ouvrir une photo, prendre une photo, toile vide : si un montage
-     attend d'être repris, il faut toucher deux fois (on ne le remplace
-     pas par erreur). */
-  async demander(bouton, action) {
-    if (!$('#bloc-reprise').hidden) {
-      armerBouton(bouton, 'Toucher encore : remplace le montage en cours', action);
-    } else {
-      action();
-    }
-  },
-
-  /* Une photo vient d'être choisie (galerie ou appareil photo). */
-  async ouvrirPhoto(fichier) {
-    if (!fichier) return;
-    Patience.montrer('Ouverture de ta photo…');
-    await laisserAfficher();
-    try {
-      // On libère d'abord la mémoire prise par l'ancien montage
-      Ressources.vider();
-      Montage.doc = null;
-      const r = await Ressources.depuisFichier(fichier, LIMITES.photo);
-      await Sauvegarde.effacer();
-      Montage.nouveau(r.largeur, r.hauteur);
-      Montage.ajouterImage(r.id, r.largeur, r.hauteur, { nom: 'Photo', remplir: true, verrouille: true });
-      Historique.vider();
-      Historique.nettoyer();
-      Sauvegarde.programmer();
-      allerVers('editeur');
-      if (r.reduite) {
-        Message.montrer(`Ta photo est très grande (${nombre(r.origLargeur)} × ${nombre(r.origHauteur)} pixels) : elle a été ` +
-          `réduite à ${nombre(r.largeur)} × ${nombre(r.hauteur)} pour rester fluide. La qualité reste très bonne.`);
-      }
-    } catch (e) {
-      console.warn(e);
-      Message.erreur(e instanceof ErreurPhoto ? e.message : MESSAGES_PHOTO.lecture);
-    } finally {
-      Patience.cacher();
-    }
-  },
-
-  /* Une toile vide, au format choisi. */
-  async ouvrirToile(largeur, hauteur, fond) {
-    Ressources.vider();
-    await Sauvegarde.effacer();
-    Montage.nouveau(largeur, hauteur);
-    if (fond === 'blanc') {
-      const { toile, ctx } = nouvelleToile(largeur, hauteur);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, largeur, hauteur);
-      const id = Ressources.depuisToile(toile);
-      Montage.ajouterImage(id, largeur, hauteur, { nom: 'Fond blanc', remplir: true, verrouille: true });
-    }
-    Historique.vider();
-    Historique.nettoyer();
-    Sauvegarde.programmer();
-    allerVers('editeur');
-  },
-
-  async reprendre() {
-    // Le montage est encore ouvert (simple retour à l'accueil) : on y
-    // retourne directement, « Annuler » garde toutes ses étapes.
-    if (Montage.doc) { allerVers('editeur'); return; }
-    Patience.montrer('Ouverture de ton montage…');
-    await laisserAfficher();
-    try {
-      const perdues = await Sauvegarde.reprendre();
-      allerVers('editeur');
-      if (perdues) Message.erreur(`${perdues} image(s) de ton montage n'ont pas pu être retrouvées. Le reste est là.`);
-    } catch (e) {
-      console.warn(e);
-      Message.erreur(e instanceof ErreurPhoto ? e.message
-        : 'Omni-Photo n\'a pas réussi à rouvrir ton montage. Tu peux ouvrir une nouvelle photo.');
-    } finally {
-      Patience.cacher();
-    }
-  }
-};
+/* ---------- 2. L'accueil (voir montages.js) ---------- */
 
 /* Une image ajoutée par-dessus (logo, autre photo). */
 async function ajouterImageCalque(fichier) {
@@ -178,17 +94,22 @@ function choisirFichier(selecteur) {
    Chaque bouton porte un « data-action » ; on trouve ici ce qu'il fait. */
 
 const ACTIONS = {
-  // Accueil
-  'ouvrir-galerie': (b) => Accueil.demander(b, () => choisirFichier('#fichier-photo')),
-  'ouvrir-camera': (b) => Accueil.demander(b, () => choisirFichier('#fichier-camera')),
-  'ouvrir-toile': (b) => Accueil.demander(b, () => $('#fenetre-toile').showModal()),
+  // Accueil (montages.js)
+  'ouvrir-galerie': () => choisirFichier('#fichier-photo'),
+  'ouvrir-camera': () => choisirFichier('#fichier-camera'),
+  'ouvrir-toile': () => $('#fenetre-toile').showModal(),
+  'importer-montage': () => choisirFichier('#fichier-montage'),
+  'montage-ouvrir': (b) => Accueil.ouvrirMontage(b.dataset.id),
+  'montage-renommer': (b) => Accueil.renommer(b.dataset.id),
+  'valider-nom': () => Accueil.validerNom(),
+  'montage-fichier': (b) => Accueil.enregistrerFichier(b.dataset.id),
+  'montage-supprimer': (b) => armerBouton(b, 'Toucher encore', () => Accueil.supprimer(b.dataset.id)),
   'creer-toile': () => {
     const [l, h] = ($('input[name="f-format"]:checked') || { value: '1080x1080' }).value.split('x').map(Number);
     const fond = ($('input[name="f-fond"]:checked') || {}).value;
     $('#fenetre-toile').close();
     Accueil.ouvrirToile(l, h, fond);
   },
-  'reprendre': () => Accueil.reprendre(),
   'voir-apropos': () => allerVers('apropos'),
   'retour': () => allerVers('accueil'),
   'mettre-a-jour': (b) => MiseAJour.appliquer(b),
@@ -217,6 +138,31 @@ const ACTIONS = {
   'partager': () => Export.partager(),
 
   // Éditeur : outils
+  'onglet': (b) => Panneaux.choisirOnglet(b.dataset.onglet),
+  'ajouter-forme': () => Formes.ajouter(),
+  'modifier-forme': () => FenetreForme.ouvrir(Montage.selection),
+  'ouvrir-effets': () => FenetreEffets.ouvrir(Montage.selection),
+  'outil-recadrage': () => OutilRecadrage.ouvrir(),
+  'recadrage-format': () => OutilRecadrage.choisirFormat(),
+  'recadrage-tourner-gauche': () => OutilRecadrage.tourner(-1),
+  'recadrage-tourner-droite': () => OutilRecadrage.tourner(+1),
+  'recadrage-appliquer': () => OutilRecadrage.appliquer(),
+  'outil-lumiere': () => Retouche.ouvrir(OutilLumiere),
+  'lumiere-reinitialiser': () => OutilLumiere.reinitialiser(),
+  'lumiere-terminer': () => OutilLumiere.fermer(),
+  'outil-flou': () => Retouche.ouvrir(OutilFlou),
+  'flou-lancer': () => OutilFlou.trouverSujet(),
+  'flou-comparer': () => OutilFlou.basculerComparaison(),
+  'flou-valider': () => OutilFlou.valider(),
+  'ia-lancer': () => OutilIA.lancer(),
+  'guide-suivant': () => Guide.suivant(),
+  'guide-passer': () => Guide.terminer(),
+  'revoir-guide': () => Guide.revoir(),
+  'supprimer-ia': (b) => armerBouton(b, 'Toucher encore pour supprimer', async () => {
+    await ModulesIA.supprimer();
+    APropos.maj();
+    Message.montrer('Fichiers de l\'intelligence artificielle supprimés. Ils seront retéléchargés au prochain détourage.');
+  }),
   'ajouter-texte': () => {
     Historique.debut();   // ajout + écriture = une seule étape d'« Annuler »
     const c = Montage.ajouterTexte();
@@ -278,6 +224,7 @@ const ACTIONS = {
     const c = Montage.calque(b.dataset.id);
     $('#fenetre-calques').close();
     if (c && c.type === 'fond') { Fond.ouvrir(); return; }   // le fond se règle dans sa fenêtre
+    if (c && c.type === 'forme' && c.forme === 'cadre') { Montage.choisir(c.id); FenetreForme.ouvrir(c.id); return; }
     Montage.choisir(b.dataset.id);
   },
   'calque-monter': (b) => Montage.deplacerOrdre(b.dataset.id, +1),
@@ -391,6 +338,21 @@ const Installation = {
 };
 
 
+/* La page « À propos » : les fichiers de l'IA déjà dans le téléphone. */
+const APropos = {
+  async maj() {
+    const etat = await ModulesIA.etat();
+    const lignes = [];
+    for (const [modele, pret] of Object.entries(etat)) {
+      const m = MODELES_IA[modele];
+      lignes.push(`${m.nom} : ${pret ? 'dans le téléphone ✓' : 'pas encore téléchargé'}`);
+    }
+    $('#ia-etat-fichiers').textContent = lignes.join(' · ');
+    $('[data-action="supprimer-ia"]').hidden = !Object.values(etat).some(Boolean);
+  }
+};
+
+
 /* ---------- 5. Démarrage ---------- */
 
 async function demarrer() {
@@ -398,12 +360,28 @@ async function demarrer() {
   Editeur.initialiser();
   Panneaux.initialiser();
   Export.initialiser();
+  FenetreEffets.initialiser();
+  FenetreForme.initialiser();
   Installation.initialiser();
 
   // Les sélecteurs de fichiers
   $('#fichier-photo').addEventListener('change', (e) => Accueil.ouvrirPhoto(e.target.files[0]));
   $('#fichier-camera').addEventListener('change', (e) => Accueil.ouvrirPhoto(e.target.files[0]));
   $('#fichier-calque').addEventListener('change', (e) => ajouterImageCalque(e.target.files[0]));
+  $('#fichier-montage').addEventListener('change', (e) => Accueil.importerFichier(e.target.files[0]));
+  $('#fenetre-nom').addEventListener('submit', (e) => { e.preventDefault(); Accueil.validerNom(); });
+
+  // Nouveaux outils de la version 1.1
+  $('#outil-recadrage').addEventListener('change', (e) => { if (e.target.name === 'rc-format') OutilRecadrage.choisirFormat(); });
+  $('#rc-redresser').addEventListener('input', (e) => OutilRecadrage.redresser(Number(e.target.value)));
+  $('#rc-redresser').addEventListener('change', () => Historique.fin());
+  $('#outil-lumiere').addEventListener('input', () => { if (Editeur.outil === OutilLumiere) OutilLumiere.appliquer(); });
+  $('#outil-lumiere').addEventListener('change', () => { if (Editeur.outil === OutilLumiere) OutilLumiere.appliquer(); });
+  $('#fl-force').addEventListener('input', () => OutilFlou.reglerForce());
+  $('#fenetre-ia').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-reponse]');
+    if (b) $('#fenetre-ia').close(b.dataset.reponse);
+  });
 
   // Réglages des outils de retouche
   $('#y-taille').addEventListener('input', () => OutilYeux.montrerReglage());
@@ -437,6 +415,8 @@ async function demarrer() {
 
   $('#chargement').hidden = true;
   $('#application').hidden = false;
+
+  Panneaux.majOnglets();
 
   // L'écran demandé par l'adresse (l'éditeur, lui, demande un montage)
   const demande = location.hash.slice(1);

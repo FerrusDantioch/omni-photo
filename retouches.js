@@ -58,13 +58,14 @@ const Retouche = {
      (calque.source), pour que le pinceau « Restaurer » puisse la faire
      revenir. « source » : une nouvelle image d'origine (yeux rouges
      corrigés aussi sur l'origine). */
-  valider(c, toile, { garderSource = false, source = null } = {}) {
+  valider(c, toile, { garderSource = false, source = null, oublierSource = false } = {}) {
     const id = Ressources.depuisToile(toile);
     Rendu.remplacements.clear();
     Rendu.fantomes.clear();
     const changements = { ressource: id };
     if (garderSource && !c.source) changements.source = c.ressource;
     if (source) changements.source = source;
+    if (oublierSource) changements.source = undefined;   // le calque redevient une image simple
     Historique.action(() => Montage.modifier(c.id, changements));
   },
 

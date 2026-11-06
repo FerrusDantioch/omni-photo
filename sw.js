@@ -13,7 +13,19 @@
    de la liste FICHIERS ci-dessous, en même temps que VERSION dans app.js.
    Sinon, les téléphones qui ont déjà ouvert l'application gardent
    l'ancienne version. */
-const CACHE = 'omni-photo-v3';
+const CACHE = 'omni-photo-v4';
+
+/* La réserve des fichiers de l'intelligence artificielle (19 à 45 Mo).
+   Ils ne sont PAS téléchargés à l'installation, mais au premier
+   détourage, par la page (ia.js, après accord). Cette réserve a son propre
+   nom et n'est jamais vidée par une mise à jour de l'application. */
+const CACHE_IA = 'omni-photo-ia-v1';
+const FICHIERS_IA = [
+  './ort.wasm.bundle.min.mjs',
+  './ort-wasm-simd-threaded.wasm',
+  './u2netp.onnx',
+  './modnet.onnx'
+];
 
 /* Le début du nom de cache propre à Omni-Photo. Toutes les applications
    de ferrusdantioch.github.io partagent la même adresse de site, donc le
@@ -37,10 +49,14 @@ const FICHIERS = [
   './retouches.js',
   './ia.js',
   './fond.js',
+  './lumiere.js',
+  './effets.js',
+  './formes.js',
+  './flou.js',
+  './recadrage.js',
+  './guide.js',
+  './montages.js',
   './detourage-travail.js',
-  './ort.wasm.bundle.min.mjs',
-  './ort-wasm-simd-threaded.wasm',
-  './u2netp.onnx',
   './export.js',
   './sauvegarde.js',
   './app.js',
@@ -90,13 +106,21 @@ self.addEventListener('install', (e) => {
 /* 2. Activation : on supprime les anciennes versions d'Omni-Photo, et
       uniquement elles (voir PREFIXE plus haut). */
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys()
-      .then((cles) => Promise.all(
-        cles.filter((k) => k.startsWith(PREFIXE) && k !== CACHE).map((k) => caches.delete(k))
-      ))
-      .then(() => self.clients.claim())
-  );
+  e.waitUntil((async () => {
+    const anciens = (await caches.keys()).filter((k) => k.startsWith(PREFIXE) && k !== CACHE && k !== CACHE_IA);
+    // La version 1.0 rangeait l'IA avec le reste : on la garde (pas besoin
+    // de la retélécharger), dans la réserve de l'IA.
+    const ia = await caches.open(CACHE_IA);
+    for (const k of anciens) {
+      const vieux = await caches.open(k);
+      for (const f of FICHIERS_IA) {
+        const rep = await vieux.match(f);
+        if (rep && !(await ia.match(f))) await ia.put(new URL(f, self.registration.scope).href, rep);
+      }
+      await caches.delete(k);
+    }
+    await self.clients.claim();
+  })());
 });
 
 /* 3. Les messages de la page :
@@ -123,6 +147,14 @@ self.addEventListener('fetch', (e) => {
 
   // À chaque ouverture de l'application, on vérifie que le cache est complet
   if (e.request.mode === 'navigate') e.waitUntil(verifierCache());
+
+  // Les fichiers de l'IA : dans leur réserve, sinon sur internet (la page
+  // se charge de les ranger, voir ia.js)
+  const chemin = new URL(e.request.url).pathname;
+  if (FICHIERS_IA.some((f) => chemin.endsWith(f.slice(1)))) {
+    e.respondWith(caches.open(CACHE_IA).then((c) => c.match(e.request, { ignoreSearch: true })).then((rep) => rep || fetch(e.request)));
+    return;
+  }
 
   e.respondWith(
     caches.open(CACHE).then((c) => c.match(e.request, { ignoreSearch: true }).then((enCache) => {

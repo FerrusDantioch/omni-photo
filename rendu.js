@@ -100,9 +100,11 @@ const Rendu = {
     if (c.type === 'image') {
       const largeurEcran = c.largeur * c.echelle * (options.zoom || 1);
       // Pendant une retouche, l'écran montre l'aperçu (pas encore validé)
-      const apercu = options.ecran && this.remplacements.get(c.ressource);
+      const apercu = options.ecran && !options.miniature && this.remplacements.get(c.ressource);
       const image = apercu || (options.ecran ? Ressources.pourEcran(c.ressource, largeurEcran) : (Ressources.obtenir(c.ressource) || {}).image);
-      const fantome = options.ecran && this.fantomes.get(c.ressource);
+      const fantome = options.ecran && !options.miniature && this.fantomes.get(c.ressource);
+      // Lumière et filtres (lumiere.js) : appliqués au dessin, l'image ne change pas
+      const filtre = c.reglages ? Lumiere.filtre(c.reglages) : 'none';
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       if (fantome) {
@@ -111,9 +113,18 @@ const Rendu = {
         ctx.drawImage(fantome, -c.largeur / 2, -c.hauteur / 2, c.largeur, c.hauteur);
         ctx.globalAlpha = alpha;
       }
-      if (image) ctx.drawImage(image, -c.largeur / 2, -c.hauteur / 2, c.largeur, c.hauteur);
+      if (image) {
+        if (Effets.actif(c)) Effets.dessinerImage(ctx, c, image, filtre, !!options.ecran);
+        else {
+          ctx.filter = filtre;
+          ctx.drawImage(image, -c.largeur / 2, -c.hauteur / 2, c.largeur, c.hauteur);
+          ctx.filter = 'none';
+        }
+      }
     } else if (c.type === 'texte') {
       this._dessinerTexte(ctx, c);
+    } else if (c.type === 'forme') {
+      Formes.dessiner(ctx, c);
     }
     ctx.restore();
   },

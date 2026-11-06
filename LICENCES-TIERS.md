@@ -24,6 +24,7 @@ pour que l'application marche hors ligne.
 | **Coming Soon** (police « Écriture »), version 1.002 | `coming-soon.woff2` | Copyright (c) 2010 by Open Window | Apache 2.0 | `@fontsource/coming-soon` 5.3.0 |
 | **Satisfy** (police « Élégante »), version 1.001 | `satisfy.woff2` | Copyright (c) 2011 by Font Diner, Inc. | Apache 2.0 | `@fontsource/satisfy` 5.3.0 |
 | **ONNX Runtime Web** 1.30.0, le moteur qui fait tourner le modèle d'IA dans le navigateur (version « WebAssembly », sur le processeur) | `ort.wasm.bundle.min.mjs`, `ort-wasm-simd-threaded.wasm` | Copyright (c) Microsoft Corporation | MIT — [LICENCE-ONNXRUNTIME-MIT.txt](LICENCE-ONNXRUNTIME-MIT.txt) | paquet npm `onnxruntime-web` 1.30.0 (publié le 14 septembre 2026), dossier `dist/` |
+| **MODNet**, le modèle d'IA du mode « Une personne » (plus précis sur les cheveux), 25,9 Mo | `modnet.onnx` | Zhanghan Ke, Jiayu Sun, Kaican Li, Qiong Yan et Rynson W.H. Lau (article « MODNet: Trimap-Free Portrait Matting in Real Time », 2022) | Apache 2.0 — [LICENCE-APACHE-2.0.txt](LICENCE-APACHE-2.0.txt) | poids officiels du dépôt `ZHKKKe/MODNet` (« The code, models, and demos in this repository […] are released under the Apache License 2.0 »), conversion ONNX de Xenova (`Xenova/modnet`, fichier `onnx/model.onnx`, 25 888 640 octets, empreinte MD5 `d0ded73e80bc0d38a64e2286486e4ea3`) ; récupéré via le paquet npm `@dloizides/background-removal` 0.2.0, dont la notice indique cette origine |
 | **U²-Netp**, le modèle d'IA qui repère le sujet d'une photo (version légère d'U²-Net, 4,6 Mo) | `u2netp.onnx` | Xuebin Qin, Zichen Zhang, Chenyang Huang, Masood Dehghan, Osmar R. Zaiane et Martin Jagersand (article « U²-Net: Going Deeper with Nested U-Structure for Salient Object Detection », 2020) | Apache 2.0 — [LICENCE-APACHE-2.0.txt](LICENCE-APACHE-2.0.txt) | conversion ONNX du modèle officiel (dépôt `xuebinqin/U-2-Net`), identique au fichier diffusé par le projet rembg (empreinte MD5 `8e83ca70e441ab06c318d82300c84806`) ; récupéré via le paquet npm `@rmbg/model-u2netp` 0.0.1 |
 
 Texte complet de la licence Apache 2.0 : [LICENCE-APACHE-2.0.txt](LICENCE-APACHE-2.0.txt).
@@ -34,6 +35,16 @@ ni auteur. C'est pourquoi le fichier a été vérifié par son empreinte : il es
 octet pour octet celui que diffuse rembg (projet libre, licence MIT) comme
 conversion du modèle officiel U²-Netp, publié par ses auteurs sous licence
 Apache 2.0. Le fichier est inclus sans modification.
+
+**À savoir sur MODNet.** La licence a été lue directement dans le dépôt officiel
+(fichier LICENSE et README de `ZHKKKe/MODNet`). Une version « allégée » de 6,6 Mo
+existe aussi ; elle a été écartée après comparaison : sur les photos de test, elle
+oubliait des parties entières du sujet. La version complète est incluse sans
+modification.
+
+**Téléchargés à la demande.** Les fichiers de l'IA (moteur et modèles) sont dans
+le dépôt, mais l'application ne les télécharge qu'au premier détourage, après
+accord de la personne, puis les garde dans le téléphone.
 
 **À savoir sur ONNX Runtime.** Le moteur compilé (`.wasm`) contient aussi de
 petits composants libres utilisés par Microsoft pour le fabriquer (listés dans
@@ -60,6 +71,8 @@ réservés, comme les autres logos de l'Omni-système.
 | Modèles RMBG 1.4 et 2.0 (BRIA AI) | licence non commerciale |
 | Bibliothèque « background-removal » d'IMG.LY | licence AGPL (copyleft) |
 | Modèle U²-Net complet (176 Mo) et BiRefNet | trop lourds pour un téléphone milieu de gamme |
+| MODNet « allégé » (quantifié, 6,6 Mo) | résultats nettement moins bons que la version complète |
+| Décodeur HEIC « libheif » | licence LGPL (ni Apache ni MIT) |
 | Version WebGPU d'ONNX Runtime (28 Mo) | deux fois plus lourde ; la version WebAssembly suffit (2 à 6 secondes) |
 
 ## Outils de développement (non inclus dans l'application)

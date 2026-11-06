@@ -265,7 +265,26 @@ body[data-vue="editeur"] main { padding: 0; max-width: none; }
 .grille-outils.trois { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 6px; }
 .grille-outils.deux { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 6px; }
 #fenetre-fond .bandeau { margin-top: 4px; border-left-color: var(--or); }
-#outils-generaux .grille-outils { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Version 1.1 : les outils en trois onglets, quatre outils par onglet */
+.grille-outils.quatre { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 6px; }
+.onglets {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px;
+  padding: 4px; border-radius: 12px; background: var(--fond); border: 1px solid var(--trait);
+}
+.onglet {
+  min-height: 44px; border: 0; border-radius: 9px; background: transparent; color: var(--discret);
+  font: 600 0.95rem var(--f-texte); cursor: pointer; touch-action: manipulation;
+  transition: background-color var(--duree), color var(--duree);
+}
+.onglet.actif { background: var(--surface-2); color: var(--texte); box-shadow: inset 0 -3px 0 var(--accent); }
+.titre-retouches { margin-top: 10px; }
+
+/* « Voir tout », posé en bas à droite de la photo */
+.bouton.voir-tout {
+  position: absolute; right: 10px; bottom: 10px; z-index: 2;
+  background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+  min-height: 44px;
+}
 .panneau-outil { display: flex; flex-direction: column; gap: 4px; }
 .panneau-outil .choix-groupe { margin-top: 4px; }
 .etat-outil { font-weight: 600; color: var(--halo); font-size: 0.95rem; min-height: 1.4em; }
@@ -287,7 +306,7 @@ body[data-vue="editeur"] main { padding: 0; max-width: none; }
   .panneau { max-height: none; border-top: 0; border-left: 1px solid var(--trait); padding: 14px; }
   .grille-outils { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grille-outils.trois { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #outils-generaux .grille-outils { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grille-outils.quatre { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grille-outils .bouton.outil { flex-direction: row; justify-content: flex-start; gap: 10px; padding-left: 12px; font-size: 0.95rem; }
 }
 
@@ -338,6 +357,12 @@ input[type="range"]::-moz-range-thumb { width: 24px; height: 24px; border-radius
 .choix-groupe { border: 0; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .choix-groupe.deux { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .choix-groupe.trois { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.choix-groupe.quatre { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.grille-choix { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.champ-texte {
+  width: 100%; min-height: 52px; padding: 10px 12px; font: 1.1rem var(--f-texte);
+  color: var(--texte); background: var(--fond); border: 1.5px solid var(--bord-bouton); border-radius: 10px;
+}
 .choix-groupe legend { font-size: 0.95rem; color: var(--discret); margin-bottom: 6px; padding: 0; }
 
 /* Un choix = une grande case qu'on touche (le rond radio est caché) */
@@ -503,3 +528,33 @@ body[data-vue="editeur"] .message { top: calc(78px + env(safe-area-inset-top)); 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+
+/* ---------- 11. Version 1.1 : « Mes montages » et le guide ---------- */
+
+.liste-montages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.carte-montage { border: 1px solid var(--trait); border-radius: 12px; padding: 8px; background: var(--fond); display: flex; flex-direction: column; gap: 6px; }
+.ouvrir-montage {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 72px; padding: 6px;
+  border: 0; border-radius: 10px; background: transparent; color: var(--texte); text-align: left;
+  font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.ouvrir-montage:active { background: var(--surface-2); }
+.vignette {
+  flex: none; width: 72px; height: 72px; border-radius: 8px; object-fit: cover;
+  background: repeating-conic-gradient(#4a4458 0 25%, #3a3547 0 50%) 0 0 / 16px 16px;
+}
+.textes-montage { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.textes-montage strong { overflow-wrap: anywhere; }
+.carte-montage .actions-calque { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.guide[popover] {
+  position: fixed; inset: auto; left: 50%; transform: translateX(-50%); margin: 0;
+  width: min(420px, calc(100vw - 24px)); height: auto; overflow: visible;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px 16px; color: var(--texte);
+  background: var(--surface-2); border: 1px solid var(--trait); border-top: 4px solid var(--accent);
+  border-radius: 12px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+.guide[popover]:not(:popover-open) { display: none; }
+.guide-cible { outline: 3px solid var(--halo); outline-offset: 3px; border-radius: 10px; }

@@ -229,7 +229,14 @@ const Editeur = {
     const lx = (dx * Math.cos(a) - dy * Math.sin(a)) / c.echelle;
     const ly = (dx * Math.sin(a) + dy * Math.cos(a)) / c.echelle;
     const marge = tolerance / (this.vue.e * c.echelle);
-    return Math.abs(lx) <= largeur / 2 + marge && Math.abs(ly) <= hauteur / 2 + marge;
+    const dedans = Math.abs(lx) <= largeur / 2 + marge && Math.abs(ly) <= hauteur / 2 + marge;
+    // Un cadre (forme qui fait le tour de l'image) ne se prend que par son
+    // bord : sinon il cacherait tout ce qui est dessous.
+    if (dedans && c.type === 'forme' && c.forme === 'cadre') {
+      const bord = c.bord * Math.min(largeur, hauteur) + marge * 2;
+      return Math.abs(lx) >= largeur / 2 - bord || Math.abs(ly) >= hauteur / 2 - bord;
+    }
+    return dedans;
   },
 
   /* Le calque le plus haut sous le doigt (seulement ceux qu'on peut bouger). */

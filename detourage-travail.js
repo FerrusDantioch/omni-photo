@@ -13,13 +13,18 @@
    - ONNX Runtime Web (Microsoft, licence MIT), le moteur qui fait
      tourner un modèle d'IA dans le navigateur : ort.wasm.bundle.min.mjs
      et ort-wasm-simd-threaded.wasm ;
-   - le modèle U²-Netp (Xuebin Qin et coll., licence Apache 2.0), qui
-     repère le sujet principal d'une photo : u2netp.onnx.
-   Ces fichiers sont rangés dans l'application (marche hors ligne).
+   - deux modèles, au choix :
+     · « objet » : U²-Netp (Xuebin Qin et coll., licence Apache 2.0), qui
+       repère le sujet principal d'une photo (personne, animal, objet) :
+       u2netp.onnx (4,6 Mo) ;
+     · « personne » : MODNet (Zhanghan Ke et coll., licence Apache 2.0),
+       spécialisé dans les personnes, plus précis sur les cheveux :
+       modnet.onnx (25,9 Mo).
+   Ces fichiers sont téléchargés une seule fois puis gardés dans le
+   téléphone (voir ia.js) : ensuite, tout marche hors ligne.
 
-   Messages reçus de la page :
-   - { type: 'preparer' } : charger le modèle (une seule fois) ;
-   - { type: 'detourer', entree, guide } : trouver le sujet.
+   Message reçu de la page :
+   - { type: 'detourer', modele, entree, largeurEntree, hauteurEntree, guide }
    Messages envoyés : 'progression', 'pret', 'masque', 'erreur'.
    ============================================================ */
 
@@ -33,8 +38,9 @@ ort.env.wasm.numThreads = 1;
 ort.env.wasm.proxy = false;
 ort.env.logLevel = 'error';
 
-const TAILLE = 320;          // le modèle travaille sur une image de 320 × 320
-let session = null;
+const FICHIERS_MODELES = { objet: './u2netp.onnx', personne: './modnet.onnx' };
+// Un seul modèle en mémoire à la fois (un téléphone n'a pas de mémoire à perdre)
+let session = null, modeleCharge = null;
 
 function envoyer(message, transferts) {
   self.postMessage(message, transferts || []);
@@ -42,11 +48,12 @@ function envoyer(message, transferts) {
 
 /* Télécharge le modèle (depuis la copie rangée dans le téléphone), en
    donnant l'avancement, puis prépare le moteur. */
-async function preparer() {
-  if (session) return;
-  const reponse = await fetch(new URL('./u2netp.onnx', import.meta.url));
+async function preparer(modele) {
+  if (session && modeleCharge === modele) return;
+  if (session) { try { await session.release(); } catch (e) { /* rien */ } session = null; modeleCharge = null; }
+  const reponse = await fetch(new URL(FICHIERS_MODELES[modele] || FICHIERS_MODELES.objet, import.meta.url));
   if (!reponse.ok) throw new Error('modele-absent');
-  const total = Number(reponse.headers.get('Content-Length')) || 4574861;
+  const total = Number(reponse.headers.get('Content-Length')) || (modele === 'personne' ? 25888640 : 4574861);
   let octets;
   if (reponse.body && reponse.body.getReader) {
     const lecteur = reponse.body.getReader();
@@ -70,6 +77,7 @@ async function preparer() {
     executionProviders: ['wasm'],
     graphOptimizationLevel: 'all'
   });
+  modeleCharge = modele;
 }
 
 /* ---------- Le filtre « guidé » ----------
@@ -120,51 +128,57 @@ function filtreGuide(I, p, l, h, r, eps) {
   return q;
 }
 
-/* Agrandit la carte 320 × 320 à la taille du guide (interpolation douce). */
-function agrandir(carte, l, h) {
+/* Agrandit la carte du modèle (cl × ch) à la taille du guide (interpolation douce). */
+function agrandir(carte, cl, ch, l, h) {
   const sortie = new Float32Array(l * h);
   for (let y = 0; y < h; y++) {
-    const sy = Math.min(TAILLE - 1, Math.max(0, ((y + 0.5) * TAILLE) / h - 0.5));
-    const y0 = Math.floor(sy), y1 = Math.min(TAILLE - 1, y0 + 1), fy = sy - y0;
+    const sy = Math.min(ch - 1, Math.max(0, ((y + 0.5) * ch) / h - 0.5));
+    const y0 = Math.floor(sy), y1 = Math.min(ch - 1, y0 + 1), fy = sy - y0;
     for (let x = 0; x < l; x++) {
-      const sx = Math.min(TAILLE - 1, Math.max(0, ((x + 0.5) * TAILLE) / l - 0.5));
-      const x0 = Math.floor(sx), x1 = Math.min(TAILLE - 1, x0 + 1), fx = sx - x0;
-      const haut = carte[y0 * TAILLE + x0] * (1 - fx) + carte[y0 * TAILLE + x1] * fx;
-      const bas = carte[y1 * TAILLE + x0] * (1 - fx) + carte[y1 * TAILLE + x1] * fx;
+      const sx = Math.min(cl - 1, Math.max(0, ((x + 0.5) * cl) / l - 0.5));
+      const x0 = Math.floor(sx), x1 = Math.min(cl - 1, x0 + 1), fx = sx - x0;
+      const haut = carte[y0 * cl + x0] * (1 - fx) + carte[y0 * cl + x1] * fx;
+      const bas = carte[y1 * cl + x0] * (1 - fx) + carte[y1 * cl + x1] * fx;
       sortie[y * l + x] = haut * (1 - fy) + bas * fy;
     }
   }
   return sortie;
 }
 
-async function detourer({ entree, guide }) {
-  await preparer();
+async function detourer({ modele, entree, largeurEntree: cl, hauteurEntree: ch, guide }) {
+  await preparer(modele);
   envoyer({ type: 'progression', etape: 'analyse', fraction: 0 });
 
   // 1. Le modèle cherche le sujet
   const debut = performance.now();
-  const tenseur = new ort.Tensor('float32', entree, [1, 3, TAILLE, TAILLE]);
+  const tenseur = new ort.Tensor('float32', entree, [1, 3, ch, cl]);
   const resultats = await session.run({ [session.inputNames[0]]: tenseur });
-  const carte = resultats[session.outputNames[0]].data;   // la sortie principale (« d0 »)
+  const carte = resultats[session.outputNames[0]].data;   // la sortie principale
   const duree = performance.now() - debut;
   envoyer({ type: 'progression', etape: 'bords', fraction: 0, duree });
 
-  // 2. La carte est ramenée entre 0 et 1 (comme le fait rembg)
-  let min = Infinity, max = -Infinity;
-  for (const v of carte) { if (v < min) min = v; if (v > max) max = v; }
-  const ecart = max - min || 1;
-  const normale = new Float32Array(TAILLE * TAILLE);
-  for (let i = 0; i < normale.length; i++) normale[i] = (carte[i] - min) / ecart;
+  // 2. La carte est ramenée entre 0 et 1. U²-Netp : on étire ses valeurs
+  //    (comme le fait rembg) ; MODNet donne déjà une opacité entre 0 et 1.
+  const normale = new Float32Array(cl * ch);
+  if (modele === 'personne') {
+    for (let i = 0; i < normale.length; i++) normale[i] = Math.min(1, Math.max(0, carte[i]));
+  } else {
+    let min = Infinity, max = -Infinity;
+    for (const v of carte) { if (v < min) min = v; if (v > max) max = v; }
+    const ecart = max - min || 1;
+    for (let i = 0; i < normale.length; i++) normale[i] = (carte[i] - min) / ecart;
+  }
 
   // 3. Les bords sont recalés sur la photo, à la taille du guide
   const { largeur: l, hauteur: h, pixels } = guide;
-  const p = agrandir(normale, l, h);
+  const p = agrandir(normale, cl, ch, l, h);
   const I = new Float32Array(l * h);
   for (let i = 0; i < l * h; i++) {
     I[i] = (0.299 * pixels[i * 4] + 0.587 * pixels[i * 4 + 1] + 0.114 * pixels[i * 4 + 2]) / 255;
   }
   const rayon = Math.max(2, Math.round(Math.max(l, h) / 170));
-  const q = filtreGuide(I, p, l, h, rayon, 0.002);
+  // MODNet suit déjà finement les cheveux : recalage plus léger
+  const q = filtreGuide(I, p, l, h, rayon, modele === 'personne' ? 0.0008 : 0.002);
 
   // 4. Le masque final (0 = fond, 255 = sujet), un peu contrasté pour des
   //    bords nets sans perdre la douceur des cheveux.
@@ -179,8 +193,7 @@ async function detourer({ entree, guide }) {
 self.onmessage = async (e) => {
   const m = e.data || {};
   try {
-    if (m.type === 'preparer') { await preparer(); envoyer({ type: 'pret' }); }
-    else if (m.type === 'detourer') await detourer(m);
+    if (m.type === 'detourer') await detourer(m);
   } catch (erreur) {
     envoyer({ type: 'erreur', message: String((erreur && erreur.message) || erreur) });
   }

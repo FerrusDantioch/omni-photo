@@ -51,6 +51,7 @@ const Panneaux = {
     const c = Montage.calqueChoisi();
     const enRetouche = !!Editeur.outil;   // un outil de retouche a son propre panneau
     $('#outils-generaux').hidden = !!c || enRetouche;
+    if (!c && !enRetouche) this.majOnglets();
     $('#outils-calque').hidden = !c || enRetouche;
     for (const panneau of $$('.panneau-outil')) panneau.hidden = !enRetouche || panneau.id !== Editeur.outil.panneau;
     if (enRetouche && Editeur.outil.majPanneau) Editeur.outil.majPanneau();
@@ -59,6 +60,7 @@ const Panneaux = {
       $('#calque-verrouille').hidden = !c.verrouille;
       $('#reglages-calque').hidden = c.verrouille;
       $('#btn-modifier-texte').hidden = c.type !== 'texte';
+      $('#btn-modifier-forme').hidden = c.type !== 'forme';
       $('#retouches-calque').hidden = c.type !== 'image';
       const { largeur } = Rendu.tailleCalque(c);
       this._valeur('#r-taille', Math.round((largeur * c.echelle * 100) / Montage.doc.largeur));
@@ -69,6 +71,27 @@ const Panneaux = {
       $('[data-action="reculer"]').disabled = i <= 0;
     }
     if ($('#fenetre-calques').open) this.remplirListeCalques();
+  },
+
+  /* Les onglets des outils : « Ajouter », « Retoucher », « Détourage ».
+     Le dernier choisi est retenu. */
+  onglet() {
+    try { return localStorage.getItem('omniphoto-onglet') || 'ajouter'; } catch (e) { return 'ajouter'; }
+  },
+
+  choisirOnglet(nom) {
+    try { localStorage.setItem('omniphoto-onglet', nom); } catch (e) { /* pas grave */ }
+    this.majOnglets();
+  },
+
+  majOnglets() {
+    const actif = this.onglet();
+    for (const b of $$('.onglets [data-onglet]')) {
+      const oui = b.dataset.onglet === actif;
+      b.setAttribute('aria-selected', oui ? 'true' : 'false');
+      b.classList.toggle('actif', oui);
+    }
+    for (const g of $$('#outils-generaux [data-groupe]')) g.hidden = g.dataset.groupe !== actif;
   },
 
   _valeur(id, v) {
@@ -89,6 +112,7 @@ const Panneaux = {
       const debut = String(c.texte).replace(/\s+/g, ' ').trim();
       return '« ' + (debut.length > 22 ? debut.slice(0, 21) + '…' : debut || 'Texte') + ' »';
     }
+    if (c.type === 'forme') return Formes.nom(c);
     return c.nom;
   },
 
@@ -122,7 +146,8 @@ const Panneaux = {
       nom.className = 'bouton nom-calque';
       nom.dataset.action = 'choisir-calque';
       nom.dataset.id = c.id;
-      nom.innerHTML = `<svg class="icone" aria-hidden="true"><use href="#i-${c.type === 'texte' ? 'texte' : (c.type === 'fond' ? 'fond' : 'image')}"/></svg>`;
+      const icone = { texte: 'texte', fond: 'fond', forme: 'forme' }[c.type] || 'image';
+      nom.innerHTML = `<svg class="icone" aria-hidden="true"><use href="#i-${icone}"/></svg>`;
       nom.append(document.createTextNode(this.nomAffiche(c) + (c.verrouille && c.type !== 'fond' ? ' (verrouillé)' : '')));
 
       const actions = document.createElement('div');

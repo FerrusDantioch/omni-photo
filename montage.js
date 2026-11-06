@@ -21,7 +21,8 @@
      visible, verrouille
    + pour une image : ressource (numéro de l'image), largeur, hauteur,
                       source (l'image d'origine, après un détourage)
-   + pour un fond   : voir fond.js
+   + pour un fond   : voir fond.js ; pour une forme : voir formes.js
+   + pour une image, en option : reglages (lumiere.js), effet (effets.js)
    + pour un texte  : texte, police, taille, couleur, gras, alignement,
                       contour { actif, couleur, epaisseur },
                       ombre { actif, couleur, flou, distance }
@@ -30,12 +31,26 @@
 
 const Montage = {
   doc: null,
+  id: null,             // numéro du montage (dans « Mes montages »)
+  nom: '',
   selection: null,      // numéro du calque choisi (ou null)
   _ecouteurs: [],
 
   /* Commence un nouveau montage vide de la taille donnée. */
   nouveau(largeur, hauteur) {
     this.doc = { largeur, hauteur, calques: [] };
+    this.id = nouvelId('m');
+    this.nom = nomParDefaut();
+    this.selection = null;
+    Historique.vider();
+    this.signaler();
+  },
+
+  /* Un montage rouvert depuis « Mes montages ». */
+  charger(id, nom, doc) {
+    this.doc = doc;
+    this.id = id;
+    this.nom = nom;
     this.selection = null;
     Historique.vider();
     this.signaler();

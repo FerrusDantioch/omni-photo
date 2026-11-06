@@ -10,6 +10,9 @@ lui répondre en français, expliquer les commandes Git une par une.
 1 base, import/export, calques, texte, images, annuler ✅ (0.1.0) ·
 2 yeux rouges, découpe manuelle (zoom) ✅ (0.2.0) · 3 détourage IA (U²-Netp + ONNX Runtime
 Web, choisis par l'auteur), retouche pinceau/gomme, nouvel arrière-plan ✅ (1.0.0).
+Puis 1.1.0 : les 11 suggestions (recadrer, lumière, flou du fond, autocollant,
+MODNet, « Mes montages », taille d'export, guide, IA à la demande, formes,
+fichier .omniphoto), demandées toutes ensemble par l'auteur.
 
 ## ⚠️ Contraintes à préserver
 
@@ -48,8 +51,9 @@ Web, choisis par l'auteur), retouche pinceau/gomme, nouvel arrière-plan ✅ (1.
   un bouton. `nettoyer()` libère les ressources que plus aucun état n'utilise.
 - `Rendu.dessinerMontage()` sert à l'écran ET à l'export (ne jamais dessiner
   autrement à l'export).
-- `Editeur.outil` (retouches.js) : `OutilYeux`, `OutilDecoupe` (et le pinceau
-  de l'étape 3). Interface : `panneau` (id du `.panneau-outil`), `commencer(c)`,
+- `Editeur.outil` : `OutilYeux`, `OutilDecoupe`, `OutilPinceau`
+  (retouches.js), `OutilIA` (ia.js), `OutilRecadrage`, `OutilLumiere`,
+  `OutilFlou`. Interface : `panneau` (id du `.panneau-outil`), `commencer(c)`,
   `appui(p)` → vrai si l'outil prend le doigt (sinon le doigt déplace la vue),
   `mouvement`, `relache`, `interrompre` (2e doigt = zoom, trait oublié),
   `toucher(p)` (simple toucher), `dessiner(ctx)` (pixels d'écran),
@@ -84,6 +88,39 @@ Web, choisis par l'auteur), retouche pinceau/gomme, nouvel arrière-plan ✅ (1.
   degrade / photo), dessiné par `dessinerFond()` sur toute l'image, jamais
   pris au doigt ; la fenêtre = une étape d'« Annuler » ; à la fermeture, le
   sujet détouré est déverrouillé et choisi.
+- **Version 1.1** :
+  - Outils en 3 onglets (`#outils-generaux [data-groupe]`, `Panneaux.choisirOnglet`,
+    `omniphoto-onglet`) ; « Voir tout » posé sur la photo. Les retouches d'une
+    image (`#retouches-calque`) restent visibles même si elle est verrouillée.
+  - IA à la demande (`ModulesIA`, ia.js) : réserve `omni-photo-ia-v1`, jamais
+    vidée par une mise à jour ; `sw.js` sert ces fichiers depuis elle (sinon
+    internet) et, à l'activation, récupère l'IA rangée par la 1.0 dans
+    l'ancienne réserve. Accord demandé dans `#fenetre-ia`. `avecIA(modele, fn)`
+    = téléchargement + barre + messages. Modèles : `objet` (U²-Netp, 320²) et
+    `personne` (MODNet fp32, petit côté 512, multiples de 32, (x/255-0,5)/0,5,
+    sortie déjà entre 0 et 1, eps du filtre guidé 0,0008). MODNet quantifié
+    écarté (mauvais résultats). `Detourage.masque(r, modele, avancer)` rend une
+    toile ≤ 1 024 px (opacité = sujet), réutilisée par le flou.
+  - `calque.reglages` (lumiere.js) et `calque.effet` (effets.js) : appliqués au
+    dessin (`ctx.filter`, chaleur = filtre SVG `#omni-chaleur-N` créé à la
+    demande), l'image ne change pas. Contour = silhouette posée en rond (cache
+    `WeakMap` par image pour l'écran ; à l'export, libéré seulement s'il n'est
+    pas en réserve).
+  - Formes (formes.js) : `type: 'forme'`, boîte `largeur`×`hauteur`. Un
+    « cadre » fait toute l'image et ne se prend au doigt que par son bord
+    (`Editeur._touche`). Le recadrage et la rotation recalent fond et cadre.
+  - Recadrage (recadrage.js) : change `doc.largeur/hauteur` et décale les
+    calques (aucune image réduite). « Redresser » part du quart de tour actuel.
+  - Flou (flou.js) : fond flouté SANS le sujet (pas de halo) + photo nette
+    dessous (bords de l'image) + sujet net dessus ; résultat opaque,
+    `oublierSource`.
+  - « Mes montages » : IndexedDB version 2, tiroirs `montages` ({ id, nom,
+    date, doc, ressources, miniature }) et `images` ; l'ancien tiroir `etat`
+    (1.0) est repris puis supprimé dans `onupgradeneeded`. `Montage.id/nom`,
+    `Montage.charger()`. Fichier `.omniphoto` : `OMNIPHOTO-MONTAGE-1\n` +
+    longueur uint32 LE + JSON + images ; à l'import, nouveaux numéros.
+  - Guide (guide.js) : `omniphoto-guide-vu` ; les tests le coupent
+    (`sansGuide`) sauf la section qui le teste.
 - Limites (`LIMITES`) : photo 4 096 px de côté, calque 2 048 px, 200 Mo,
   270 Mpx. Erreurs lisibles : `ErreurPhoto` + `MESSAGES_PHOTO`.
 - Sauvegarde auto (`sauvegarde.js`) : tiroir `etat` (clé `courant`) + tiroir
@@ -100,7 +137,7 @@ Web, choisis par l'auteur), retouche pinceau/gomme, nouvel arrière-plan ✅ (1.
 
 ## Tests
 
-`node tests/tester.js` (Playwright + Chromium ; 167 vérifications, dont le détourage hors ligne) ;
+`node tests/tester.js` (Playwright + Chromium ; 242 vérifications, dont le détourage hors ligne) ;
 `RAPIDE=1` saute les contrôles communs. `tests/outils.js` = boîte à outils
 commune à plusieurs applications de l'Omni-système.
 Servir le dossier parent pour reproduire l'adresse de GitHub Pages

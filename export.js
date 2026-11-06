@@ -36,32 +36,58 @@ const Export = {
     return limiter(Number($('#e-qualite').value) / 100, 0.5, 1);
   },
 
+  /* Le côté le plus long voulu (0 = taille réelle). */
+  cote() {
+    return Number(($('input[name="e-taille"]:checked') || {}).value) || 0;
+  },
+
+  _dimensions(cote) {
+    const d = Montage.doc;
+    const f = cote ? Math.min(1, cote / Math.max(d.largeur, d.hauteur)) : 1;
+    return [Math.max(1, Math.round(d.largeur * f)), Math.max(1, Math.round(d.hauteur * f))];
+  },
+
   majFenetre() {
     const jpg = this.format() === 'jpg';
     $('#zone-qualite').hidden = !jpg;
     $('#e-qualite').parentElement.querySelector('output').textContent = $('#e-qualite').value + ' %';
     const d = Montage.doc;
-    $('#e-dimensions').textContent = `${nombre(d.largeur)} × ${nombre(d.hauteur)} pixels`;
+    // Les tailles plus petites que l'image : 2 048 et 1 080 pixels (côté le plus long)
+    for (const el of $$('input[name="e-taille"]')) {
+      const cote = Number(el.value) || 0;
+      const inutile = cote && cote >= Math.max(d.largeur, d.hauteur);
+      el.disabled = inutile;
+      if (inutile && el.checked) $('input[name="e-taille"][value="reelle"]').checked = true;
+      const [l, h] = this._dimensions(cote);
+      el.parentElement.querySelector('small').textContent = `${nombre(l)} × ${nombre(h)}`;
+    }
+    const [l, h] = this._dimensions(this.cote());
+    $('#e-dimensions').textContent = `${nombre(l)} × ${nombre(h)} pixels`;
     $('#e-explication').textContent = jpg
       ? 'JPG : fichier léger, idéal pour une photo. Les zones transparentes deviennent blanches.'
       : 'PNG : qualité parfaite et transparence gardée (idéal pour un détourage ou un logo). Fichier plus lourd.';
   },
 
-  /* Dessine le montage en taille réelle et en fait un fichier. */
-  async fabriquer(format, qualite) {
+  /* Dessine le montage (en taille réelle, ou réduit : « cote » = côté le
+     plus long voulu) et en fait un fichier. */
+  async fabriquer(format, qualite, cote = 0) {
     const doc = Montage.doc;
     await Polices.pret;
+    const [l, h] = this._dimensions(cote);
+    const f = l / doc.largeur;
     let toile;
     try {
       toile = document.createElement('canvas');
-      toile.width = doc.largeur;
-      toile.height = doc.hauteur;
+      toile.width = l;
+      toile.height = h;
       const ctx = toile.getContext('2d');
-      if (!ctx || toile.width !== doc.largeur) throw new Error('memoire');
+      if (!ctx || toile.width !== l) throw new Error('memoire');
       if (format === 'jpg') {
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, doc.largeur, doc.hauteur);
+        ctx.fillRect(0, 0, l, h);
       }
+      ctx.setTransform(f, 0, 0, f, 0, 0);
+      ctx.imageSmoothingQuality = 'high';
       Rendu.dessinerMontage(ctx, doc, { ecran: false });
       const type = format === 'jpg' ? 'image/jpeg' : 'image/png';
       const blob = await new Promise((ok) => toile.toBlob(ok, type, qualite));
@@ -80,7 +106,7 @@ const Export = {
     Patience.montrer('Fabrication de ton image…');
     await laisserAfficher();
     try {
-      const blob = await this.fabriquer(format, this.qualite());
+      const blob = await this.fabriquer(format, this.qualite(), this.cote());
       return { blob, nom: nomDeFichier(format), type: blob.type };
     } catch (e) {
       console.warn(e);
@@ -126,7 +152,7 @@ const Export = {
     // Le téléphone n'autorise le partage que juste après un toucher. Si la
     // fabrication a été longue, il faut toucher une 2e fois : l'image déjà
     // prête est alors gardée, pour ne pas la refaire.
-    const empreinte = Montage.copie() + this.format() + this.qualite();
+    const empreinte = Montage.copie() + this.format() + this.qualite() + this.cote();
     let fichier = this._pret && this._pret.empreinte === empreinte ? this._pret.fichier : null;
     if (!fichier) {
       const f = await this._preparer();

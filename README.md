@@ -13,7 +13,7 @@ Application de l'Omni-système, par Ferrus Dantioch.
 
 ## Ce que fait l'application
 
-État actuel : **les trois étapes sont terminées** (version 1.0.0).
+État actuel : **version 1.1.0** (les trois étapes du plan, puis 11 améliorations).
 
 | Fonction | État |
 |---|---|
@@ -31,6 +31,17 @@ Application de l'Omni-système, par Ferrus Dantioch.
 | Retrait du fond par IA, **dans le téléphone** (modèle U²-Netp), avec barre de progression et bouton « Arrêter » | ✅ |
 | Retouche du détourage : pinceau « Restaurer » et gomme, taille et douceur réglables, fond retiré visible en transparence | ✅ |
 | Nouvel arrière-plan : couleur unie, dégradé (4 directions) ou photo de la galerie ; sujet déplaçable et redimensionnable | ✅ |
+| **1.1** Recadrer (formats tout prêts), tourner d'un quart de tour, redresser une photo penchée | ✅ |
+| **1.1** Lumière : luminosité, contraste, couleurs, chaleur, et 8 filtres (noir et blanc, sépia, vintage…) | ✅ |
+| **1.1** Flou du fond (effet portrait), grâce à l'IA | ✅ |
+| **1.1** Contour et ombre autour d'un sujet détouré (effet autocollant) | ✅ |
+| **1.1** Mode « Une personne » (modèle MODNet), plus précis sur les cheveux | ✅ |
+| **1.1** « Mes montages » : plusieurs montages gardés, renommer, supprimer | ✅ |
+| **1.1** Taille d'export au choix (réelle, 2 048 px, 1 080 px pour partager) | ✅ |
+| **1.1** Guide de la première fois (quatre bulles) | ✅ |
+| **1.1** IA téléchargée seulement au premier détourage (installation : 1 Mo au lieu de 20) | ✅ |
+| **1.1** Formes : flèche, rectangle, rond, bulle, étoile, cœur, cadre | ✅ |
+| **1.1** Fichier « .omniphoto » pour passer un montage du téléphone à la tablette | ✅ |
 
 Les très grandes photos sont réduites à 4 096 pixels de côté pour rester
 fluides sur un téléphone milieu de gamme (un message le signale).
@@ -40,9 +51,15 @@ le sujet, 1 024 pixels pour recaler les bords sur la photo), puis le résultat
 est appliqué à la photo **en taille réelle** : la qualité de l'image n'est pas
 réduite. Il faut compter 2 à 6 secondes sur un téléphone milieu de gamme.
 
-**Première ouverture :** l'application télécharge environ 20 Mo (dont 19 Mo
-pour l'intelligence artificielle), une seule fois. Ensuite, tout marche sans
-internet, détourage compris. Les messages
+**Première ouverture :** l'application télécharge environ 1 Mo. L'intelligence
+artificielle (19 Mo, et 26 Mo de plus pour le mode « Une personne ») n'est
+téléchargée qu'au premier détourage, après votre accord, une seule fois.
+Ensuite, tout marche sans internet, détourage compris. La page « À propos »
+permet de supprimer ces fichiers pour libérer de la place.
+
+Les outils sont rangés en trois onglets : **Ajouter** (texte, image, forme,
+calques), **Retoucher** (recadrer, lumière, yeux rouges, découpe) et
+**Détourage** (retirer le fond, pinceau, nouveau fond, flou du fond). Les messages
 d'erreur (format non pris en charge comme le HEIC, fichier vide, manque de
 mémoire…) sont en français et expliquent quoi faire.
 
@@ -108,6 +125,14 @@ Tous les fichiers sont à la racine (plus simple à envoyer depuis un téléphon
 | `ia.js` | le détourage par IA : préparation, barre de progression, application du masque |
 | `detourage-travail.js` | le « travailleur » qui fait tourner l'IA à côté de la page (écran fluide) |
 | `fond.js` | le nouvel arrière-plan (couleur, dégradé, photo) |
+| `recadrage.js` | recadrer, tourner, redresser |
+| `lumiere.js` | lumière, contraste, couleurs, chaleur et filtres |
+| `flou.js` | le flou du fond (effet portrait) |
+| `effets.js` | le contour et l'ombre (effet autocollant) |
+| `formes.js` | les formes (flèche, bulle, cadre…) |
+| `montages.js` | l'accueil : « Mes montages » et les fichiers « .omniphoto » |
+| `guide.js` | le guide de la première fois |
+| `modnet.onnx` | le modèle d'IA MODNet, mode « Une personne » (licence Apache 2.0) |
 | `ort.wasm.bundle.min.mjs`, `ort-wasm-simd-threaded.wasm` | le moteur ONNX Runtime Web (licence MIT) |
 | `u2netp.onnx` | le modèle d'IA U²-Netp (licence Apache 2.0) |
 | `export.js` | la fabrication du fichier PNG ou JPG |
@@ -122,7 +147,7 @@ Tous les fichiers sont à la racine (plus simple à envoyer depuis un téléphon
 ## Tests automatiques (sur ordinateur)
 
 Ils ouvrent l'application dans un vrai navigateur qui imite un téléphone, puis
-une tablette, et vérifient 167 points : ouverture de photos, textes,
+une tablette, et vérifient 242 points : ouverture de photos, textes,
 gestes, annuler, export, sauvegarde, hors ligne, messages d'erreur…
 
 ```bash
@@ -140,5 +165,5 @@ node tests/tester.js
 ## Licence
 
 © 2026 Ferrus Dantioch — Creative Commons BY-NC-ND 4.0 (voir [LICENSE](LICENSE)).
-Les polices, le moteur ONNX Runtime Web (MIT) et le modèle U²-Netp (Apache 2.0)
-gardent leur propre licence : voir [LICENCES-TIERS.md](LICENCES-TIERS.md).
+Les polices, le moteur ONNX Runtime Web (MIT) et les modèles U²-Netp et MODNet
+(Apache 2.0) gardent leur propre licence : voir [LICENCES-TIERS.md](LICENCES-TIERS.md).

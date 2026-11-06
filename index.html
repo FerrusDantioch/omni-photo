@@ -30,8 +30,15 @@
 <script defer src="./retouches.js"></script>
 <script defer src="./ia.js"></script>
 <script defer src="./fond.js"></script>
+<script defer src="./lumiere.js"></script>
+<script defer src="./effets.js"></script>
+<script defer src="./formes.js"></script>
+<script defer src="./flou.js"></script>
+<script defer src="./recadrage.js"></script>
+<script defer src="./guide.js"></script>
 <script defer src="./export.js"></script>
 <script defer src="./sauvegarde.js"></script>
+<script defer src="./montages.js"></script>
 <script defer src="./app.js"></script>
 </head>
 <body>
@@ -74,6 +81,14 @@
     <symbol id="i-magie" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20L15 9"/><path d="M14 4l1 2.5L17.5 7.5 15 8.5 14 11l-1-2.5L10.5 7.5 13 6.5z" fill="currentColor" stroke-width="1"/><path d="M19 13l.6 1.4 1.4.6-1.4.6L19 17l-.6-1.4-1.4-.6 1.4-.6z" fill="currentColor" stroke-width="1"/></g></symbol>
     <symbol id="i-pinceau" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4l-9 9"/><path d="M11 13c-2-1-5 0-5 3 0 2-1 3-3 4 4 1 9 0 9-4 0-1-.3-2-1-3z" fill="currentColor" fill-opacity=".3"/></g></symbol>
     <symbol id="i-fond" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" fill-opacity=".25"/><circle cx="12" cy="10" r="3.2" fill="none"/><path d="M6.5 21c.8-3.5 3-5.5 5.5-5.5s4.7 2 5.5 5.5"/></g></symbol>
+    <symbol id="i-forme" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><circle cx="8" cy="8" r="5"/><rect x="11" y="11" width="10" height="10" rx="1.5" fill="currentColor" fill-opacity=".3"/></g></symbol>
+    <symbol id="i-recadrer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v16h16"/><path d="M2 6h16v16"/></g></symbol>
+    <symbol id="i-lumiere" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></g></symbol>
+    <symbol id="i-flou" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="9" r="3.5"/><path d="M5.5 21c1-4 3.5-6 6.5-6s5.5 2 6.5 6"/><path d="M2 4h3M2 8h2M19 4h3M20 8h2M2 12h1M21 12h1" opacity=".55"/></g></symbol>
+    <symbol id="i-autocollant" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3c4 0 7 3 7 7s-3 8-7 11c-4-3-7-7-7-11s3-7 7-7z" stroke-width="3.5" opacity=".45"/><path d="M12 6c2.5 0 4 1.8 4 4.2S14.3 15 12 17c-2.3-2-4-4.4-4-6.8S9.5 6 12 6z" fill="currentColor" fill-opacity=".35"/></g></symbol>
+    <symbol id="i-tourner-g" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 4v4h4"/></g></symbol>
+    <symbol id="i-tourner-d" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/></g></symbol>
+    <symbol id="i-fichier" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5"/><path d="M12 11v7M9 15l3 3 3-3"/></g></symbol>
     <symbol id="i-installer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 7v7M9 11l3 3 3-3"/></g></symbol>
   </defs>
 </svg>
@@ -107,12 +122,10 @@
   </div>
 
   <div class="pile">
-    <div id="bloc-reprise" class="bloc" hidden>
-      <p class="etiquette">Montage en cours</p>
-      <p id="date-reprise" class="aide"></p>
-      <button type="button" class="bouton principal large" data-action="reprendre">
-        <svg class="icone" aria-hidden="true"><use href="#i-reprendre"/></svg>Reprendre mon montage
-      </button>
+    <div id="bloc-montages" class="bloc" hidden>
+      <p class="etiquette">Mes montages</p>
+      <ul id="liste-montages" class="liste-montages"></ul>
+      <p id="place-montages" class="aide"></p>
     </div>
 
     <div class="bloc">
@@ -126,6 +139,10 @@
       <button type="button" class="bouton large" data-action="ouvrir-toile">
         <svg class="icone" aria-hidden="true"><use href="#i-toile"/></svg>Commencer sur une toile vide
       </button>
+      <button type="button" class="bouton large discret" data-action="importer-montage">
+        <svg class="icone" aria-hidden="true"><use href="#i-fichier"/></svg>Ouvrir un fichier .omniphoto
+      </button>
+      <p class="aide">Un fichier « .omniphoto » sert à passer un montage d'un appareil à l'autre (du téléphone à la tablette, par exemple).</p>
     </div>
 
     <button type="button" class="bouton large discret" data-action="voir-apropos">
@@ -146,21 +163,34 @@
 
   <div class="zone-toile">
     <canvas id="toile" aria-label="Ton montage. Touche un texte ou une image pour le choisir."></canvas>
+    <button type="button" class="bouton petit voir-tout" data-action="voir-tout"><svg class="icone" aria-hidden="true"><use href="#i-voir-tout"/></svg>Voir tout</button>
   </div>
 
   <div class="panneau" id="panneau">
     <!-- Rien n'est choisi : les outils pour ajouter -->
     <div id="outils-generaux">
-      <div class="grille-outils">
+      <div class="onglets" role="tablist" aria-label="Outils">
+        <button type="button" class="onglet" role="tab" data-action="onglet" data-onglet="ajouter">Ajouter</button>
+        <button type="button" class="onglet" role="tab" data-action="onglet" data-onglet="retoucher">Retoucher</button>
+        <button type="button" class="onglet" role="tab" data-action="onglet" data-onglet="detourage">Détourage</button>
+      </div>
+      <div class="grille-outils quatre" data-groupe="ajouter">
         <button type="button" class="bouton outil" data-action="ajouter-texte"><svg class="icone" aria-hidden="true"><use href="#i-texte"/></svg>Texte</button>
         <button type="button" class="bouton outil" data-action="ajouter-image"><svg class="icone" aria-hidden="true"><use href="#i-image"/></svg>Image</button>
+        <button type="button" class="bouton outil" data-action="ajouter-forme"><svg class="icone" aria-hidden="true"><use href="#i-forme"/></svg>Forme</button>
         <button type="button" class="bouton outil" data-action="ouvrir-calques"><svg class="icone" aria-hidden="true"><use href="#i-calques"/></svg>Calques</button>
+      </div>
+      <div class="grille-outils quatre" data-groupe="retoucher" hidden>
+        <button type="button" class="bouton outil" data-action="outil-recadrage"><svg class="icone" aria-hidden="true"><use href="#i-recadrer"/></svg>Recadrer</button>
+        <button type="button" class="bouton outil" data-action="outil-lumiere"><svg class="icone" aria-hidden="true"><use href="#i-lumiere"/></svg>Lumière</button>
+        <button type="button" class="bouton outil" data-action="outil-yeux"><svg class="icone" aria-hidden="true"><use href="#i-yeux"/></svg>Yeux rouges</button>
+        <button type="button" class="bouton outil" data-action="outil-decoupe"><svg class="icone" aria-hidden="true"><use href="#i-ciseaux"/></svg>Découper</button>
+      </div>
+      <div class="grille-outils quatre" data-groupe="detourage" hidden>
         <button type="button" class="bouton outil" data-action="outil-ia"><svg class="icone" aria-hidden="true"><use href="#i-magie"/></svg>Détourer</button>
         <button type="button" class="bouton outil" data-action="outil-pinceau"><svg class="icone" aria-hidden="true"><use href="#i-pinceau"/></svg>Pinceau</button>
         <button type="button" class="bouton outil" data-action="ouvrir-fond"><svg class="icone" aria-hidden="true"><use href="#i-fond"/></svg>Fond</button>
-        <button type="button" class="bouton outil" data-action="outil-yeux"><svg class="icone" aria-hidden="true"><use href="#i-yeux"/></svg>Yeux rouges</button>
-        <button type="button" class="bouton outil" data-action="outil-decoupe"><svg class="icone" aria-hidden="true"><use href="#i-ciseaux"/></svg>Découper</button>
-        <button type="button" class="bouton outil" data-action="voir-tout"><svg class="icone" aria-hidden="true"><use href="#i-voir-tout"/></svg>Voir tout</button>
+        <button type="button" class="bouton outil" data-action="outil-flou"><svg class="icone" aria-hidden="true"><use href="#i-flou"/></svg>Flou du fond</button>
       </div>
       <p class="aide astuce">Touche un texte ou une image pour le choisir, puis fais-le glisser.
         Deux doigts : agrandir et tourner. Sans rien choisir, deux doigts zooment dans la photo.</p>
@@ -180,6 +210,7 @@
 
       <div id="reglages-calque">
         <button type="button" class="bouton large principal" id="btn-modifier-texte" data-action="modifier-texte"><svg class="icone" aria-hidden="true"><use href="#i-texte"/></svg>Modifier le texte</button>
+        <button type="button" class="bouton large principal" id="btn-modifier-forme" data-action="modifier-forme"><svg class="icone" aria-hidden="true"><use href="#i-forme"/></svg>Modifier la forme</button>
         <label class="curseur"><span>Taille</span><input type="range" id="r-taille" min="1" max="300" step="1" data-unite=" %"><output></output></label>
         <label class="curseur"><span>Rotation</span><input type="range" id="r-rotation" min="-180" max="180" step="1" data-unite="°"><output></output></label>
         <label class="curseur"><span>Opacité</span><input type="range" id="r-opacite" min="0" max="100" step="1" data-unite=" %"><output></output></label>
@@ -191,10 +222,16 @@
           <button type="button" class="bouton outil" data-action="reculer"><svg class="icone" aria-hidden="true"><use href="#i-arriere"/></svg>Reculer</button>
           <button type="button" class="bouton outil danger" data-action="supprimer"><svg class="icone" aria-hidden="true"><use href="#i-poubelle"/></svg>Supprimer</button>
         </div>
-        <!-- Seulement pour une image : ses retouches -->
-        <div id="retouches-calque" class="grille-outils deux">
+      </div>
+      <!-- Les retouches d'une image : toujours là, même si l'image est verrouillée -->
+      <div id="retouches-calque">
+        <p class="etiquette titre-retouches">Retoucher cette image</p>
+        <div class="grille-outils quatre">
+          <button type="button" class="bouton outil" data-action="outil-lumiere"><svg class="icone" aria-hidden="true"><use href="#i-lumiere"/></svg>Lumière</button>
+          <button type="button" class="bouton outil" data-action="ouvrir-effets"><svg class="icone" aria-hidden="true"><use href="#i-autocollant"/></svg>Contour et ombre</button>
           <button type="button" class="bouton outil" data-action="outil-ia"><svg class="icone" aria-hidden="true"><use href="#i-magie"/></svg>Détourer</button>
           <button type="button" class="bouton outil" data-action="outil-pinceau"><svg class="icone" aria-hidden="true"><use href="#i-pinceau"/></svg>Pinceau</button>
+          <button type="button" class="bouton outil" data-action="outil-flou"><svg class="icone" aria-hidden="true"><use href="#i-flou"/></svg>Flou du fond</button>
           <button type="button" class="bouton outil" data-action="outil-yeux"><svg class="icone" aria-hidden="true"><use href="#i-yeux"/></svg>Yeux rouges</button>
           <button type="button" class="bouton outil" data-action="outil-decoupe"><svg class="icone" aria-hidden="true"><use href="#i-ciseaux"/></svg>Découper</button>
         </div>
@@ -226,6 +263,12 @@
       </div>
       <p class="aide nom-cible"></p>
       <p id="ia-etat" class="etat-outil"></p>
+      <fieldset class="choix-groupe deux">
+        <legend>Sur la photo, il y a…</legend>
+        <label class="choix"><input type="radio" name="ia-modele" value="objet" checked><span>Tout sujet<small>personne, animal, objet</small></span></label>
+        <label class="choix"><input type="radio" name="ia-modele" value="personne"><span>Une personne<small>plus précis (cheveux)</small></span></label>
+      </fieldset>
+      <button type="button" class="bouton large principal" data-action="ia-lancer"><svg class="icone" aria-hidden="true"><use href="#i-magie"/></svg><span class="texte-bouton">Détourer</span></button>
       <p class="aide">L'intelligence artificielle tourne dans ton téléphone : ta photo n'est envoyée nulle part.</p>
       <div class="grille-outils deux">
         <button type="button" class="bouton outil" data-action="ia-comparer"><svg class="icone" aria-hidden="true"><use href="#i-comparer"/></svg><span class="texte-bouton">Voir l'original</span></button>
@@ -256,6 +299,85 @@
         <button type="button" class="bouton outil principal" data-action="pinceau-valider"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Valider</button>
       </div>
       <p class="aide astuce">Zoome à deux doigts pour les détails (cheveux, bords). Le fond retiré apparaît en transparence : c'est ce que « Restaurer » peut faire revenir.</p>
+    </div>
+
+    <!-- Outil « Recadrer » (voir recadrage.js) -->
+    <div id="outil-recadrage" class="panneau-outil" hidden>
+      <div class="tete-calque">
+        <p class="nom-choisi">Recadrer</p>
+        <button type="button" class="bouton petit" data-action="outil-fermer"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Fermer</button>
+      </div>
+      <p id="rc-etat" class="etat-outil"></p>
+      <fieldset class="choix-groupe quatre">
+        <legend>Format</legend>
+        <label class="choix"><input type="radio" name="rc-format" value="libre" checked><span>Libre</span></label>
+        <label class="choix"><input type="radio" name="rc-format" value="original"><span>D'origine</span></label>
+        <label class="choix"><input type="radio" name="rc-format" value="carre"><span>Carré</span></label>
+        <label class="choix"><input type="radio" name="rc-format" value="portrait"><span>Portrait<small>4:5</small></span></label>
+        <label class="choix"><input type="radio" name="rc-format" value="story"><span>Story<small>9:16</small></span></label>
+        <label class="choix"><input type="radio" name="rc-format" value="paysage"><span>Paysage<small>16:9</small></span></label>
+        <label class="choix"><input type="radio" name="rc-format" value="photo"><span>Photo<small>3:2</small></span></label>
+      </fieldset>
+      <div id="rc-zone-redresser">
+        <label class="curseur"><span>Redresser</span><input type="range" id="rc-redresser" min="-15" max="15" step="1" value="0"><output></output></label>
+      </div>
+      <div class="grille-outils trois">
+        <button type="button" class="bouton outil" data-action="recadrage-tourner-gauche"><svg class="icone" aria-hidden="true"><use href="#i-tourner-g"/></svg>Tourner à gauche</button>
+        <button type="button" class="bouton outil" data-action="recadrage-tourner-droite"><svg class="icone" aria-hidden="true"><use href="#i-tourner-d"/></svg>Tourner à droite</button>
+        <button type="button" class="bouton outil principal" data-action="recadrage-appliquer"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Recadrer</button>
+      </div>
+      <p class="aide astuce">Tire les coins du cadre pour l'agrandir ou le réduire, fais-le glisser pour le déplacer. Le recadrage ne réduit pas la qualité de la photo.</p>
+    </div>
+
+    <!-- Outil « Lumière » (voir lumiere.js) -->
+    <div id="outil-lumiere" class="panneau-outil" hidden>
+      <div class="tete-calque">
+        <p class="nom-choisi">Lumière</p>
+        <button type="button" class="bouton petit principal" data-action="lumiere-terminer"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Terminé</button>
+      </div>
+      <p class="aide nom-cible"></p>
+      <label class="curseur"><span>Luminosité</span><input type="range" id="lu-lumiere" min="-100" max="100" step="1" value="0"><output></output></label>
+      <label class="curseur"><span>Contraste</span><input type="range" id="lu-contraste" min="-100" max="100" step="1" value="0"><output></output></label>
+      <label class="curseur"><span>Couleurs</span><input type="range" id="lu-saturation" min="-100" max="100" step="1" value="0"><output></output></label>
+      <label class="curseur"><span>Chaleur</span><input type="range" id="lu-chaleur" min="-100" max="100" step="1" value="0"><output></output></label>
+      <fieldset class="choix-groupe quatre">
+        <legend>Filtre</legend>
+        <label class="choix"><input type="radio" name="lu-filtre" value="aucun" checked><span>Aucun</span></label>
+        <label class="choix"><input type="radio" name="lu-filtre" value="nb"><span>Noir et blanc</span></label>
+        <label class="choix"><input type="radio" name="lu-filtre" value="sepia"><span>Sépia</span></label>
+        <label class="choix"><input type="radio" name="lu-filtre" value="vintage"><span>Vintage</span></label>
+        <label class="choix"><input type="radio" name="lu-filtre" value="doux"><span>Doux</span></label>
+        <label class="choix"><input type="radio" name="lu-filtre" value="vif"><span>Vif</span></label>
+        <label class="choix"><input type="radio" name="lu-filtre" value="froid"><span>Froid</span></label>
+        <label class="choix"><input type="radio" name="lu-filtre" value="dramatique"><span>Dramatique</span></label>
+      </fieldset>
+      <button type="button" class="bouton large discret" data-action="lumiere-reinitialiser"><svg class="icone" aria-hidden="true"><use href="#i-annuler"/></svg>Revenir à la photo d'origine</button>
+      <p class="aide astuce">Ces réglages ne modifient pas la photo : tu peux les changer ou les retirer quand tu veux.</p>
+    </div>
+
+    <!-- Outil « Flou du fond » (voir flou.js) -->
+    <div id="outil-flou" class="panneau-outil" hidden>
+      <div class="tete-calque">
+        <p class="nom-choisi">Flou du fond</p>
+        <button type="button" class="bouton petit" data-action="outil-fermer"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Fermer</button>
+      </div>
+      <p class="aide nom-cible"></p>
+      <p id="fl-etat" class="etat-outil"></p>
+      <div id="fl-choix">
+        <fieldset class="choix-groupe deux">
+          <legend>Sur la photo, il y a…</legend>
+          <label class="choix"><input type="radio" name="fl-modele" value="objet" checked><span>Tout sujet<small>personne, animal, objet</small></span></label>
+          <label class="choix"><input type="radio" name="fl-modele" value="personne"><span>Une personne<small>plus précis (cheveux)</small></span></label>
+        </fieldset>
+        <button type="button" class="bouton large principal" data-action="flou-lancer"><svg class="icone" aria-hidden="true"><use href="#i-magie"/></svg>Trouver le sujet</button>
+      </div>
+      <div id="fl-reglage" hidden>
+        <label class="curseur"><span>Force</span><input type="range" id="fl-force" min="5" max="100" step="1" value="40"><output></output></label>
+        <div class="grille-outils deux">
+          <button type="button" class="bouton outil" data-action="flou-comparer"><svg class="icone" aria-hidden="true"><use href="#i-comparer"/></svg><span class="texte-bouton">Voir l'original</span></button>
+          <button type="button" class="bouton outil principal" data-action="flou-valider"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Valider</button>
+        </div>
+      </div>
     </div>
 
     <!-- Outil « Découper la silhouette » (voir retouches.js) -->
@@ -314,11 +436,21 @@
       </div>
       <p>Un outil de montage photo tout simple, pour ton téléphone et ta tablette : ajouter des textes
          et des images, les déplacer, les agrandir, les tourner, corriger les yeux rouges, découper une
-         silhouette, retirer le fond automatiquement, le remplacer, puis enregistrer le résultat en PNG ou en JPG.</p>
+         silhouette, recadrer, régler la lumière, retirer ou flouter le fond, ajouter des formes, puis enregistrer
+         le résultat en PNG ou en JPG.</p>
       <p>Le retrait automatique du fond utilise une intelligence artificielle qui tourne <strong>dans ton
          appareil</strong> : tes photos ne sont jamais envoyées ailleurs.</p>
       <p><strong>Application gratuite et sans publicité.</strong> Pas de compte, pas de pistage.
          Omni-Photo fonctionne sans connexion : tes photos restent sur ton appareil, rien n'est envoyé sur internet.</p>
+      <button type="button" class="bouton large" data-action="revoir-guide"><svg class="icone" aria-hidden="true"><use href="#i-info"/></svg>Revoir le guide de la première fois</button>
+    </div>
+
+    <div class="bloc">
+      <p class="etiquette">Intelligence artificielle</p>
+      <p>Les fichiers de l'intelligence artificielle sont téléchargés au premier détourage (environ 19 Mo pour « Tout sujet »,
+         26 Mo de plus pour « Une personne »), puis gardés dans le téléphone.</p>
+      <p id="ia-etat-fichiers" class="aide"></p>
+      <button type="button" class="bouton large danger" data-action="supprimer-ia" hidden><svg class="icone" aria-hidden="true"><use href="#i-poubelle"/></svg>Supprimer ces fichiers (libère de la place)</button>
     </div>
 
     <!-- Mention de l'auteur : uniquement le pseudonyme, jamais le vrai nom. -->
@@ -363,7 +495,8 @@
       <ul class="liste-licences">
         <li><strong>ONNX Runtime Web</strong> 1.30.0 — Microsoft Corporation — <strong>licence MIT</strong>
             (texte complet dans le fichier LICENCE-ONNXRUNTIME-MIT.txt)</li>
-        <li><strong>U²-Netp</strong>, modèle de détourage — Xuebin Qin et coll. — <strong>licence Apache 2.0</strong></li>
+        <li><strong>U²-Netp</strong>, modèle de détourage « Tout sujet » — Xuebin Qin et coll. — <strong>licence Apache 2.0</strong></li>
+        <li><strong>MODNet</strong>, modèle de détourage « Une personne » — Zhanghan Ke et coll. — <strong>licence Apache 2.0</strong></li>
       </ul>
       <p class="aide">Les fichiers sont inclus sans modification. Liste complète : fichier LICENCES-TIERS.md.</p>
     </div>
@@ -500,6 +633,101 @@
   </div>
 </dialog>
 
+<!-- Téléchargement de l'IA (première fois) : on demande l'accord -->
+<dialog id="fenetre-ia" class="fenetre" aria-labelledby="titre-fenetre-ia">
+  <h2 id="titre-fenetre-ia">Télécharger l'intelligence artificielle ?</h2>
+  <p style="margin-top:10px">Pour détourer (« <span id="ia-modele">Tout sujet</span> »), Omni-Photo doit d'abord télécharger
+     l'intelligence artificielle : <strong id="ia-taille">19 Mo</strong>, <strong>une seule fois</strong>.
+     Ensuite, elle marche même sans internet, et ta photo n'est jamais envoyée.</p>
+  <p class="aide">Conseil : utilise le Wi-Fi, pour ne pas consommer ton forfait.</p>
+  <div class="pile serree">
+    <button type="button" class="bouton principal large" data-reponse="oui"><svg class="icone" aria-hidden="true"><use href="#i-export"/></svg>Télécharger</button>
+    <button type="button" class="bouton large discret" data-reponse="non"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Plus tard</button>
+  </div>
+</dialog>
+
+<!-- Renommer un montage -->
+<dialog id="fenetre-nom" class="fenetre" aria-labelledby="titre-nom">
+  <form method="dialog">
+    <h2 id="titre-nom">Renommer le montage</h2>
+    <label class="champ"><span>Nom du montage</span>
+      <input type="text" id="nom-montage" maxlength="80" autocomplete="off" class="champ-texte">
+    </label>
+    <div class="rangee fin">
+      <button type="button" class="bouton" data-action="fermer-fenetre"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Fermer</button>
+      <button type="submit" class="bouton principal"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Contour et ombre d'une image (voir effets.js). La photo reste visible au-dessus. -->
+<dialog id="fenetre-effets" class="fenetre feuille" aria-labelledby="titre-effets">
+  <div class="tete-fenetre">
+    <h2 id="titre-effets" tabindex="-1">Contour et ombre</h2>
+    <button type="button" class="bouton petit principal" data-action="fermer-fenetre"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Terminé</button>
+  </div>
+  <p id="ef-conseil" class="aide">Astuce : l'effet est le plus joli sur un sujet détouré (« Détourer »), comme un autocollant.</p>
+  <div class="sous-bloc" id="ef-zone-contour">
+    <label class="interrupteur"><input type="checkbox" id="ef-contour"><span>Contour</span></label>
+    <div class="reglages-secondaires">
+      <div class="reglage-couleur">
+        <label class="champ-couleur"><span>Couleur</span><input type="color" id="ef-contour-couleur"></label>
+        <div class="nuancier" data-cible="ef-contour-couleur"></div>
+      </div>
+      <label class="curseur"><span>Épaisseur</span><input type="range" id="ef-contour-epaisseur" min="0.5" max="8" step="0.5"><output></output></label>
+    </div>
+  </div>
+  <div class="sous-bloc" id="ef-zone-ombre">
+    <label class="interrupteur"><input type="checkbox" id="ef-ombre"><span>Ombre</span></label>
+    <div class="reglages-secondaires">
+      <div class="reglage-couleur">
+        <label class="champ-couleur"><span>Couleur</span><input type="color" id="ef-ombre-couleur"></label>
+        <div class="nuancier" data-cible="ef-ombre-couleur"></div>
+      </div>
+      <label class="curseur"><span>Flou</span><input type="range" id="ef-ombre-flou" min="0" max="10" step="0.5"><output></output></label>
+      <label class="curseur"><span>Distance</span><input type="range" id="ef-ombre-distance" min="0" max="10" step="0.5"><output></output></label>
+    </div>
+  </div>
+</dialog>
+
+<!-- Une forme (voir formes.js). La photo reste visible au-dessus. -->
+<dialog id="fenetre-forme" class="fenetre feuille" aria-labelledby="titre-forme">
+  <div class="tete-fenetre">
+    <h2 id="titre-forme" tabindex="-1">Forme</h2>
+    <button type="button" class="bouton petit principal" data-action="fermer-fenetre"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Terminé</button>
+  </div>
+  <fieldset class="choix-groupe quatre">
+    <legend>Forme</legend>
+    <div id="fo-formes" class="grille-choix"></div>
+  </fieldset>
+  <div class="sous-bloc">
+    <label class="interrupteur" id="fo-zone-remplir-choix"><input type="checkbox" id="fo-remplir"><span>Remplissage</span></label>
+    <div class="reglage-couleur">
+      <label class="champ-couleur"><span>Couleur</span><input type="color" id="fo-couleur"></label>
+      <div class="nuancier" data-cible="fo-couleur"></div>
+    </div>
+    <div id="fo-zone-bord">
+      <label class="curseur"><span>Épaisseur</span><input type="range" id="fo-bord" min="1" max="20" step="1"><output></output></label>
+    </div>
+  </div>
+  <div class="sous-bloc" id="fo-zone-trait">
+    <label class="interrupteur"><input type="checkbox" id="fo-trait"><span>Contour</span></label>
+    <div class="reglages-secondaires">
+      <div class="reglage-couleur">
+        <label class="champ-couleur"><span>Couleur</span><input type="color" id="fo-trait-couleur"></label>
+        <div class="nuancier" data-cible="fo-trait-couleur"></div>
+      </div>
+      <label class="curseur"><span>Épaisseur</span><input type="range" id="fo-trait-epaisseur" min="1" max="20" step="1"><output></output></label>
+    </div>
+  </div>
+  <div id="fo-zone-proportions">
+    <label class="curseur"><span>Proportions</span><input type="range" id="fo-proportions" min="-100" max="100" step="1"><output></output></label>
+  </div>
+  <div id="fo-zone-arrondi">
+    <label class="curseur"><span>Coins arrondis</span><input type="range" id="fo-arrondi" min="0" max="100" step="1"><output></output></label>
+  </div>
+</dialog>
+
 <!-- Export -->
 <dialog id="fenetre-export" class="fenetre" aria-labelledby="titre-export">
   <h2 id="titre-export">Exporter l'image</h2>
@@ -510,6 +738,12 @@
     <label class="choix"><input type="radio" name="e-format" value="jpg"><span>JPG<small>plus léger</small></span></label>
   </fieldset>
   <p class="aide" id="e-explication"></p>
+  <fieldset class="choix-groupe trois">
+    <legend>Taille</legend>
+    <label class="choix"><input type="radio" name="e-taille" value="reelle" checked><span>Réelle<small></small></span></label>
+    <label class="choix"><input type="radio" name="e-taille" value="2048"><span>Moyenne<small></small></span></label>
+    <label class="choix"><input type="radio" name="e-taille" value="1080"><span>Pour partager<small></small></span></label>
+  </fieldset>
   <div id="zone-qualite" hidden>
     <label class="curseur"><span>Qualité</span><input type="range" id="e-qualite" min="50" max="100" step="1" value="90"><output></output></label>
     <p class="aide">90 % : très belle image, fichier léger. 100 % : la meilleure qualité, fichier plus lourd.</p>
@@ -526,6 +760,18 @@
 <input type="file" id="fichier-camera" accept="image/*" capture="environment" hidden>
 <input type="file" id="fichier-calque" accept="image/*" hidden>
 <input type="file" id="fichier-fond" accept="image/*" hidden>
+<!-- Pas de filtre de type : Android ne reconnaît pas toujours les « .omniphoto » -->
+<input type="file" id="fichier-montage" hidden>
+
+<!-- Le guide de la première fois (voir guide.js) -->
+<div id="guide" class="guide" popover="manual" hidden role="dialog" aria-labelledby="guide-texte">
+  <p id="guide-numero" class="etiquette"></p>
+  <p id="guide-texte"></p>
+  <div class="rangee fin">
+    <button type="button" class="bouton petit discret" data-action="guide-passer">Passer</button>
+    <button type="button" class="bouton petit principal" data-action="guide-suivant"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Suivant</button>
+  </div>
+</div>
 
 <!-- « Patiente… » pendant les longs calculs -->
 <div id="patience" class="patience" popover="manual" hidden>

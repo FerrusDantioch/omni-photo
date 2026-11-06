@@ -9,7 +9,7 @@ lui répondre en français, expliquer les commandes Git une par une.
 
 1 base, import/export, calques, texte, images, annuler ✅ (0.1.0) ·
 2 yeux rouges, découpe manuelle (zoom) ✅ (0.2.0) · 3 détourage IA (U²-Netp + ONNX Runtime
-Web, choisis par l'auteur), retouche pinceau/gomme, nouvel arrière-plan.
+Web, choisis par l'auteur), retouche pinceau/gomme, nouvel arrière-plan ✅ (1.0.0).
 
 ## ⚠️ Contraintes à préserver
 
@@ -63,6 +63,27 @@ Web, choisis par l'auteur), retouche pinceau/gomme, nouvel arrière-plan.
   seuil faible) ; masque adouci 3×3 ; R ramené à min(R, (V+B)/2) × 0,85.
 - Découpe : contour en pixels de l'image, `destination-in` / `destination-out`,
   bord doux par `filter: blur()`. L'image garde sa taille (calque inchangé).
+- Détourage IA (`ia.js` + travailleur module `detourage-travail.js`) :
+  ONNX Runtime Web 1.30.0, version `ort.wasm.bundle.min.mjs` + `.wasm` seul
+  (`wasmPaths = { wasm: … }`, sinon il réclame `ort-wasm-simd-threaded.mjs`),
+  1 fil (GitHub Pages n'est pas « cross-origin isolated »). Entrée 1×3×320×320
+  étirée, /max puis moyenne/écart ImageNet ; sortie 0 (« d0 ») normalisée
+  min-max ; filtre guidé (rayon ≈ côté/170, eps 0,002) sur un guide ≤ 1 024 px ;
+  masque appliqué à la photo en taille réelle. Barre de progression :
+  `Patience.montrer(t, { progression, arreter })` / `avancer()` ; durée du
+  dernier calcul dans `omniphoto-duree-ia`. `Detourage.arreter()` (même avant
+  le démarrage du calcul : `_arretDemande`). Erreurs : `ErreurIA` + `MESSAGES_IA`.
+- `calque.source` = image d'origine d'un sujet détouré (IA, découpe, pinceau :
+  `Retouche.valider(c, toile, { garderSource: true })`). Le pinceau
+  (`OutilPinceau`) = origine × masque (restaurer : ajoute au masque ; gommer :
+  `destination-out`), traits rejoués pour « Retirer le dernier ». Les yeux
+  rouges corrigent aussi `source`. `source` compte pour `nettoyer()`, la
+  sauvegarde et `ressourcesUtilisees()`. `Rendu.fantomes` = origine à 30 %
+  sous le sujet pendant le pinceau (écran seulement).
+- Fond (`fond.js`) : calque `type: 'fond'` tout en bas (`mode` couleur /
+  degrade / photo), dessiné par `dessinerFond()` sur toute l'image, jamais
+  pris au doigt ; la fenêtre = une étape d'« Annuler » ; à la fermeture, le
+  sujet détouré est déverrouillé et choisi.
 - Limites (`LIMITES`) : photo 4 096 px de côté, calque 2 048 px, 200 Mo,
   270 Mpx. Erreurs lisibles : `ErreurPhoto` + `MESSAGES_PHOTO`.
 - Sauvegarde auto (`sauvegarde.js`) : tiroir `etat` (clé `courant`) + tiroir
@@ -79,7 +100,7 @@ Web, choisis par l'auteur), retouche pinceau/gomme, nouvel arrière-plan.
 
 ## Tests
 
-`node tests/tester.js` (Playwright + Chromium ; 126 vérifications) ;
+`node tests/tester.js` (Playwright + Chromium ; 167 vérifications, dont le détourage hors ligne) ;
 `RAPIDE=1` saute les contrôles communs. `tests/outils.js` = boîte à outils
 commune à plusieurs applications de l'Omni-système.
 Servir le dossier parent pour reproduire l'adresse de GitHub Pages

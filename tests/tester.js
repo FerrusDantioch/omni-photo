@@ -123,11 +123,43 @@ const versEcran = (p, x, y) => p.evaluate(({ x, y }) => {
 
 const toucherEcran = (p, e) => doigts(p, [['pointerdown', 1, e.x, e.y], ['pointerup', 1, e.x, e.y]]);
 
+
+/* Un sujet bien visible : un disque orangé texturé, sur un fond gris clair
+   légèrement dégradé (de quoi intéresser l'IA). */
+async function fabriquerSujet(p, largeur = 600, hauteur = 400) {
+  const b64 = await p.evaluate(async ({ largeur, hauteur }) => {
+    const c = document.createElement('canvas');
+    c.width = largeur; c.height = hauteur;
+    const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 0, hauteur);
+    g.addColorStop(0, '#e3e6ea'); g.addColorStop(1, '#c9ced6');
+    x.fillStyle = g; x.fillRect(0, 0, largeur, hauteur);
+    const r = Math.min(largeur, hauteur) * 0.3;
+    const d = x.createRadialGradient(largeur / 2 - r / 3, hauteur / 2 - r / 3, r / 6, largeur / 2, hauteur / 2, r);
+    d.addColorStop(0, '#f6a04d'); d.addColorStop(1, '#b5481c');
+    x.fillStyle = d; x.beginPath(); x.arc(largeur / 2, hauteur / 2, r, 0, 7); x.fill();
+    x.fillStyle = '#5a2a12';
+    for (let i = 0; i < 9; i++) { x.beginPath(); x.arc(largeur / 2 + Math.cos(i) * r * 0.55, hauteur / 2 + Math.sin(i * 1.7) * r * 0.5, r * 0.07, 0, 7); x.fill(); }
+    const blob = await new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.92));
+    c.width = 0;
+    const t = new Uint8Array(await blob.arrayBuffer());
+    let s = ''; for (let i = 0; i < t.length; i += 0x8000) s += String.fromCharCode(...t.subarray(i, i + 0x8000));
+    return btoa(s);
+  }, { largeur, hauteur });
+  return Buffer.from(b64, 'base64');
+}
+
+/* Attendre la fin du détourage (l'aperçu est prêt, ou l'outil s'est fermé). */
+async function attendreIA(p) {
+  await p.waitForFunction(() => document.querySelector('#patience').hidden && (OutilIA.apercu || Editeur.outil !== OutilIA), null, { timeout: 120000 });
+  await p.waitForTimeout(200);
+}
+
 lancer('Omni-Photo', async () => {
   if (!process.env.RAPIDE) await controlesCommuns({ serviceWorker: 'sw.js' });
 
   await section('Fichiers du dépôt', async () => {
-    for (const f of ['README.md', 'LICENCES-TIERS.md', 'LICENCE-APACHE-2.0.txt', 'LICENSE']) {
+    for (const f of ['README.md', 'LICENCES-TIERS.md', 'LICENCE-APACHE-2.0.txt', 'LICENCE-ONNXRUNTIME-MIT.txt', 'LICENSE']) {
       verifier(fs.existsSync(path.join(RACINE, f)), f + ' existe');
     }
   });
@@ -592,6 +624,195 @@ lancer('Omni-Photo', async () => {
     await t.ctx.close();
   });
 
+
+  // ---------------- Étape 3 : détourage par IA, pinceau, nouveau fond ----------------
+  await section('Détourage automatique par IA', async () => {
+    const t = await nouvellePage();
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'sujet.jpg', mimeType: 'image/jpeg', buffer: await fabriquerSujet(p) });
+    await attendreFin(p);
+    const photo = (await etat(p)).doc.calques[0];
+    // On note chaque étape de la barre de progression
+    await p.evaluate(() => { window._etapes = []; const f = Patience.avancer.bind(Patience); Patience.avancer = (x, t) => { window._etapes.push([x, t || '']); f(x, t); }; });
+    await p.click('[data-action="outil-ia"]');
+    await p.waitForTimeout(300);
+    verifier(await p.$eval('#patience', (el) => !el.hidden) && !(await p.$eval('#patience-progression', (el) => el.hidden)), 'une barre de progression s’affiche');
+    await attendreIA(p);
+    const etapes = await p.evaluate(() => window._etapes);
+    const fractions = etapes.map((e) => e[0]);
+    verifier(fractions.every((f, i) => i === 0 || f >= fractions[i - 1] - 1e-9) && fractions[fractions.length - 1] === 1, 'la barre avance toujours et arrive à 100 %', fractions.map((f) => Math.round(f * 100)).join(','));
+    const textes = [...new Set(etapes.map((e) => e[1]).filter(Boolean))];
+    verifier(textes.some((x) => /Recherche du sujet/.test(x)) && textes.some((x) => /bords/.test(x)), 'les étapes sont expliquées', textes);
+    verifier(await p.evaluate(() => !!OutilIA.apercu && Rendu.remplacements.size === 1), 'aperçu avant validation');
+    let px = await pixel(p, photo.ressource, 300, 200, true);
+    verifier(px[3] > 200, 'le sujet est gardé', px);
+    px = await pixel(p, photo.ressource, 15, 15, true);
+    const coin = px[3];
+    verifier(coin < 40, 'le fond est retiré', px);
+    px = await pixel(p, photo.ressource, 300, 200);
+    verifier(px[3] === 255, 'la vraie photo n’est pas encore touchée');
+    await p.click('[data-action="ia-comparer"]');
+    verifier(await p.evaluate(() => Rendu.remplacements.size === 0), '« Voir l’original » compare');
+    await p.click('[data-action="ia-comparer"]');
+    await p.click('[data-action="ia-valider"]');
+    let e = await etat(p);
+    const detouree = e.doc.calques[0];
+    verifier(detouree.ressource !== photo.ressource && detouree.source === photo.ressource && e.passe === 1, 'valider : nouvelle image, l’origine est gardée pour le pinceau');
+    px = await pixel(p, detouree.ressource, 15, 15);
+    verifier(px[3] < 40, 'le fond est transparent dans l’image', px);
+    await p.click('[data-action="annuler"]');
+    e = await etat(p);
+    verifier(e.doc.calques[0].ressource === photo.ressource && !e.doc.calques[0].source, '« Annuler » rend la photo d’origine');
+    await p.click('[data-action="retablir"]');
+
+    // ---- Pinceau : gommer puis restaurer ----
+    await p.click('[data-action="outil-pinceau"]');
+    verifier(await p.evaluate(() => Editeur.outil === OutilPinceau && Rendu.fantomes.size === 1), 'le pinceau s’ouvre, le fond retiré est visible en transparence');
+    await p.click('label.choix:has(input[value="gommer"])');
+    await p.evaluate(() => { const r = document.querySelector('#p-taille'); r.value = 30; r.dispatchEvent(new Event('input', { bubbles: true })); });
+    const centre = await versEcran(p, 300, 200), centre2 = await versEcran(p, 330, 200);
+    await doigts(p, [['pointerdown', 1, centre.x, centre.y], ['pointermove', 1, (centre.x + centre2.x) / 2, centre.y], ['pointermove', 1, centre2.x, centre2.y], ['pointerup', 1, centre2.x, centre2.y]]);
+    px = await pixel(p, detouree.ressource, 300, 200, true);
+    verifier(px[3] < 10, 'la gomme rend le centre transparent', px);
+    await p.click('[data-action="pinceau-retirer"]');
+    px = await pixel(p, detouree.ressource, 300, 200, true);
+    verifier(px[3] > 200, '« Retirer le dernier » annule ce coup de gomme', px);
+    await p.click('label.choix:has(input[value="restaurer"])');
+    const c1 = await versEcran(p, 15, 15), c2 = await versEcran(p, 40, 15);
+    await doigts(p, [['pointerdown', 1, c1.x, c1.y], ['pointermove', 1, c2.x, c2.y], ['pointerup', 1, c2.x, c2.y]]);
+    px = await pixel(p, detouree.ressource, 15, 15, true);
+    verifier(px[3] > 240 && px[0] > 180, '« Restaurer » fait revenir la photo d’origine', px);
+    // Un 2e doigt pendant un trait : c'est un zoom, le trait est oublié
+    const n = await p.evaluate(() => OutilPinceau.traits.length);
+    await doigts(p, [['pointerdown', 1, centre.x, centre.y], ['pointermove', 1, centre.x + 5, centre.y], ['pointerdown', 2, centre.x + 90, centre.y], ['pointermove', 2, centre.x + 120, centre.y], ['pointerup', 2, centre.x + 120, centre.y], ['pointerup', 1, centre.x + 5, centre.y]]);
+    verifier((await p.evaluate(() => OutilPinceau.traits.length)) === n, 'deux doigts zooment sans peindre');
+    await p.click('[data-action="pinceau-valider"]');
+    e = await etat(p);
+    const retouchee = e.doc.calques[0];
+    px = await pixel(p, retouchee.ressource, 15, 15);
+    verifier(px[3] > 240 && retouchee.source === photo.ressource && !(await p.evaluate(() => Editeur.outil)), 'pinceau validé, l’origine est toujours gardée');
+    px = await pixel(p, retouchee.ressource, 585, 385);
+    verifier(px[3] < 40, 'le reste du fond reste transparent', px);
+
+    // ---- Nouveau fond ----
+    await p.click('[data-action="ouvrir-fond"]');
+    await p.waitForTimeout(200);
+    verifier(await p.$eval('#fenetre-fond', (d) => d.open), 'la fenêtre « Nouveau fond » s’ouvre');
+    verifier(await p.$eval('#b-conseil', (el) => el.hidden), 'pas d’avertissement : le sujet est détouré');
+    await p.click('#b-zone-couleur .nuancier .pastille:nth-child(8)');
+    e = await etat(p);
+    verifier(e.doc.calques[0].type === 'fond' && e.doc.calques[0].couleur === '#4ea8de', 'un fond de couleur est posé tout en bas', e.doc.calques[0]);
+    verifier(e.doc.calques[1].verrouille === false, 'le sujet devient déplaçable');
+    await p.click('label.choix:has(input[name="b-mode"][value="degrade"])');
+    verifier(!(await p.$eval('#b-zone-couleur2', (el) => el.hidden)), 'le dégradé propose une 2e couleur');
+    await p.click('label.choix:has(input[value="rond"])');
+    e = await etat(p);
+    verifier(e.doc.calques[0].mode === 'degrade' && e.doc.calques[0].direction === 'rond', 'dégradé rond');
+    await p.click('label.choix:has(input[name="b-mode"][value="photo"])');
+    await donnerFichier(p, '[data-action="fond-photo"]', { name: 'plage.jpg', mimeType: 'image/jpeg', buffer: await fabriquerImage(p, 900, 600) });
+    await attendreFin(p);
+    e = await etat(p);
+    verifier(e.doc.calques[0].mode === 'photo' && !!e.doc.calques[0].ressource, 'une photo de la galerie comme fond');
+    const passeAvant = (await etat(p)).passe;
+    await p.click('#fenetre-fond [data-action="fermer-fenetre"]');
+    await p.waitForTimeout(300);
+    e = await etat(p);
+    verifier(e.passe === passeAvant + 1, 'tout le réglage du fond = une étape d’« Annuler »', e.passe - passeAvant);
+    verifier(e.selection === e.doc.calques[1].id, 'le sujet est choisi pour être placé');
+    // Déplacer et réduire le sujet sur son nouveau fond
+    const s0 = e.doc.calques[1];
+    const m = await ecranDe(p, s0.id);
+    await doigts(p, [['pointerdown', 1, m.x, m.y], ['pointermove', 1, m.x + 20, m.y], ['pointermove', 1, m.x + 40, m.y + 10], ['pointerup', 1, m.x + 40, m.y + 10]]);
+    const deplace = (await etat(p)).doc.calques[1];
+    const vue = await p.evaluate(() => Editeur.vue.e);
+    verifier(Math.abs(deplace.x - s0.x - 40 / vue) < 1, 'le sujet se déplace sur le nouveau fond', deplace.x - s0.x);
+    await doigts(p, [['pointerdown', 1, m.x - 40, m.y], ['pointerdown', 2, m.x + 80, m.y], ['pointermove', 2, m.x + 20, m.y], ['pointerup', 2, m.x + 20, m.y], ['pointerup', 1, m.x - 40, m.y]]);
+    const s1 = (await etat(p)).doc.calques[1];
+    verifier(Math.abs(s1.echelle / s0.echelle - 0.5) < 0.02, 'pincer réduit le sujet', s1.echelle / s0.echelle);
+    // Le fond se voit dans le fichier exporté, autour du sujet
+    await p.click('[data-action="ouvrir-export"]');
+    const [telechargement] = await Promise.all([p.waitForEvent('download'), p.click('[data-action="enregistrer"]')]);
+    const b64 = fs.readFileSync(await telechargement.path()).toString('base64');
+    const coins = await p.evaluate(async (b64) => {
+      const img = await createImageBitmap(await (await fetch('data:image/png;base64,' + b64)).blob());
+      const c = new OffscreenCanvas(img.width, img.height); const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+      return [...x.getImageData(img.width - 5, img.height - 5, 1, 1).data];
+    }, b64);
+    verifier(coins[3] === 255, 'le PNG exporté a le nouveau fond (plus de transparence)', coins);
+    // Annuler le fond
+    for (let i = 0; i < 3; i++) await p.click('[data-action="annuler"]');
+    e = await etat(p);
+    verifier(!e.doc.calques.some((c) => c.type === 'fond'), '« Annuler » retire le fond', e.doc.calques.map((c) => c.type));
+
+    // ---- Sauvegarde : l'origine du sujet revient aussi ----
+    for (let i = 0; i < 3; i++) await p.click('[data-action="retablir"]');
+    await p.evaluate(() => Sauvegarde.maintenant());
+    await p.reload();
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await p.click('[data-action="reprendre"]');
+    await attendreFin(p);
+    e = await etat(p);
+    verifier(e.doc.calques[0].type === 'fond' && e.doc.calques[1].source && await p.evaluate((id) => !!Ressources.obtenir(id), e.doc.calques[1].source),
+      'après réouverture : fond, sujet et image d’origine sont là');
+
+    // ---- Arrêter pendant le calcul ----
+    await p.evaluate(() => Montage.choisir(Montage.doc.calques[1].id));
+    await p.click('#retouches-calque [data-action="outil-ia"]');
+    await p.waitForSelector('#patience-arreter:not([hidden])');
+    await p.click('#patience-arreter');
+    await attendreIA(p);
+    verifier((await texte(p, '#message-texte')).includes('arrêté') && !(await p.evaluate(() => Editeur.outil)), '« Arrêter » interrompt le détourage sans rien changer');
+
+    // ---- Panne du moteur (manque de mémoire simulé) ----
+    await p.evaluate(() => {
+      Detourage._jeter();
+      window._Worker = window.Worker;
+      window.Worker = class { constructor() { setTimeout(() => this.onerror && this.onerror({ preventDefault() {} }), 30); } postMessage() {} terminate() {} };
+    });
+    const avantPanne = (await etat(p)).doc.calques[1].ressource;
+    await p.click('[data-action="outil-ia"]:visible');
+    await attendreIA(p);
+    verifier((await texte(p, '#message-texte')).includes('mémoire') && (await etat(p)).doc.calques[1].ressource === avantPanne, 'panne de l’IA : message rassurant, photo intacte', await texte(p, '#message-texte'));
+    await p.evaluate(() => { window.Worker = window._Worker; Detourage._jeter(); });
+    await p.click('[data-action="fermer-message"]');
+    await t.ctx.close();
+  });
+
+  await section('Détourage hors ligne et grande photo', async () => {
+    const t = await nouvellePage();
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    // Le service worker range tout (modèle d'IA compris), puis on coupe internet
+    const pret = await p.evaluate(() => Promise.race([navigator.serviceWorker.ready.then(() => true), new Promise((ok) => setTimeout(() => ok(false), 20000))]));
+    await p.waitForFunction(async () => {
+      const c = await caches.open((await caches.keys()).find((k) => k.startsWith('omni-photo-')));
+      return !!(await c.match('./u2netp.onnx')) && !!(await c.match('./ort-wasm-simd-threaded.wasm'));
+    }, null, { timeout: 60000 });
+    verifier(pret, 'le modèle d’IA est rangé dans le téléphone');
+    await p.reload();
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await t.ctx.setOffline(true);
+    await p.reload();
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'grande.jpg', mimeType: 'image/jpeg', buffer: await fabriquerSujet(p, 6000, 4500) });
+    await attendreFin(p);
+    const photo = (await etat(p)).doc.calques[0];
+    verifier(photo.largeur === 4096, 'grande photo réduite à 4 096 pixels pour rester fluide', photo.largeur);
+    await p.click('[data-action="outil-ia"]');
+    await attendreIA(p);
+    const ok = await p.evaluate(() => !!OutilIA.apercu && [OutilIA.apercu.width, OutilIA.apercu.height]);
+    verifier(ok && ok[0] === 4096 && ok[1] === 3072, 'sans internet, le détourage marche, en taille réelle (4 096 × 3 072)', ok || await texte(p, '#message-texte'));
+    if (ok) {
+      let px = await pixel(p, photo.ressource, 2048, 1536, true);
+      verifier(px[3] > 200, 'grande photo : sujet gardé', px);
+      px = await pixel(p, photo.ressource, 60, 60, true);
+      verifier(px[3] < 40, 'grande photo : fond retiré', px);
+    }
+    await t.ctx.setOffline(false);
+    await t.ctx.close();
+  });
+
   await section('Page « À propos »', async () => {
     await p.click('[data-action="accueil"]');
     await attendre(p, 300);
@@ -602,6 +823,7 @@ lancer('Omni-Photo', async () => {
     verifier(t.includes('Application gratuite et sans publicité'), 'mention « Application gratuite et sans publicité »');
     verifier(/Version \d+\.\d+\.\d+/.test(t), 'numéro de version affiché');
     verifier(t.includes('Apache 2.0') && t.includes('Roboto Slab') && t.includes('Satisfy'), 'licences tierces listées');
+    verifier(t.includes('ONNX Runtime Web') && t.includes('MIT') && t.includes('U²-Netp'), 'licences de l’IA listées');
     await p.goBack();
     await attendre(p, 300);
     verifier((await etat(p)).vue === 'accueil', 'le bouton retour du téléphone ramène à l’accueil');

@@ -10,7 +10,7 @@
 
 /* ⚠️ Numéro de version, affiché dans « À propos ». À changer à chaque
    version publiée, EN MÊME TEMPS que CACHE en haut de sw.js. */
-const VERSION = '0.2.0';
+const VERSION = '1.0.0';
 
 
 /* ---------- 1. Les écrans ---------- */
@@ -258,8 +258,28 @@ const ACTIONS = {
   'decoupe-reprendre': () => OutilDecoupe.reprendre(),
   'decoupe-valider': () => OutilDecoupe.valider(),
 
+  // Détourage par IA (ia.js), pinceau (retouches.js), fond (fond.js)
+  'outil-ia': () => Retouche.ouvrir(OutilIA),
+  'ia-comparer': () => OutilIA.basculerComparaison(),
+  'ia-valider': () => OutilIA.valider(),
+  'ia-pinceau': () => OutilIA.valider('pinceau'),
+  'ia-fond': () => OutilIA.valider('fond'),
+  'ia-arreter': () => Detourage.arreter(),
+  'outil-pinceau': () => Retouche.ouvrir(OutilPinceau),
+  'pinceau-fantome': () => OutilPinceau.basculerFantome(),
+  'pinceau-retirer': () => OutilPinceau.retirerDernier(),
+  'pinceau-valider': () => OutilPinceau.valider(),
+  'ouvrir-fond': () => Fond.ouvrir(),
+  'fond-photo': () => choisirFichier('#fichier-fond'),
+  'fond-retirer': (b) => armerBouton(b, 'Toucher encore pour retirer le fond', () => Fond.retirer()),
+
   // Fenêtre « Calques »
-  'choisir-calque': (b) => { Montage.choisir(b.dataset.id); $('#fenetre-calques').close(); },
+  'choisir-calque': (b) => {
+    const c = Montage.calque(b.dataset.id);
+    $('#fenetre-calques').close();
+    if (c && c.type === 'fond') { Fond.ouvrir(); return; }   // le fond se règle dans sa fenêtre
+    Montage.choisir(b.dataset.id);
+  },
   'calque-monter': (b) => Montage.deplacerOrdre(b.dataset.id, +1),
   'calque-descendre': (b) => Montage.deplacerOrdre(b.dataset.id, -1),
   'calque-visible': (b) => { const c = Montage.calque(b.dataset.id); if (c) Montage.modifier(c.id, { visible: !c.visible }); },
@@ -389,6 +409,13 @@ async function demarrer() {
   $('#y-taille').addEventListener('input', () => OutilYeux.montrerReglage());
   $('#outil-decoupe').addEventListener('change', () => { if (Editeur.outil === OutilDecoupe) OutilDecoupe._maj(); });
   $('#d-adoucir').addEventListener('input', () => OutilDecoupe.majPanneau());
+  $('#p-taille').addEventListener('input', () => OutilPinceau.montrerReglage());
+  $('#p-douceur').addEventListener('input', () => OutilPinceau.majPanneau());
+  $('#outil-pinceau').addEventListener('change', () => { if (Editeur.outil === OutilPinceau) OutilPinceau.majPanneau(); });
+  $('#fichier-fond').addEventListener('change', (e) => Fond.choisirPhoto(e.target.files[0]));
+  $('#fenetre-fond').addEventListener('input', () => Fond.appliquer());
+  $('#fenetre-fond').addEventListener('change', () => Fond.appliquer());
+  $('#fenetre-fond').addEventListener('close', () => Fond.fermer());
 
   // On sauvegarde quand l'application passe en arrière-plan
   document.addEventListener('visibilitychange', () => {

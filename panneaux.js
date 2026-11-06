@@ -122,8 +122,8 @@ const Panneaux = {
       nom.className = 'bouton nom-calque';
       nom.dataset.action = 'choisir-calque';
       nom.dataset.id = c.id;
-      nom.innerHTML = `<svg class="icone" aria-hidden="true"><use href="#i-${c.type === 'texte' ? 'texte' : 'image'}"/></svg>`;
-      nom.append(document.createTextNode(this.nomAffiche(c) + (c.verrouille ? ' (verrouillé)' : '')));
+      nom.innerHTML = `<svg class="icone" aria-hidden="true"><use href="#i-${c.type === 'texte' ? 'texte' : (c.type === 'fond' ? 'fond' : 'image')}"/></svg>`;
+      nom.append(document.createTextNode(this.nomAffiche(c) + (c.verrouille && c.type !== 'fond' ? ' (verrouillé)' : '')));
 
       const actions = document.createElement('div');
       actions.className = 'actions-calque';
@@ -142,7 +142,7 @@ const Panneaux = {
         petit('calque-monter', 'haut', 'Monter', i === calques.length - 1),
         petit('calque-descendre', 'bas', 'Descendre', i === 0),
         petit('calque-visible', c.visible ? 'oeil' : 'oeil-ferme', c.visible ? 'Masquer' : 'Afficher'),
-        petit('calque-verrou', c.verrouille ? 'cadenas-ouvert' : 'cadenas', c.verrouille ? 'Déverrouiller' : 'Verrouiller')
+        petit('calque-verrou', c.verrouille ? 'cadenas-ouvert' : 'cadenas', c.verrouille ? 'Déverrouiller' : 'Verrouiller', c.type === 'fond')
       );
       li.append(nom, actions);
       liste.append(li);

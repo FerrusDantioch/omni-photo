@@ -10,7 +10,7 @@
 
 /* ⚠️ Numéro de version, affiché dans « À propos ». À changer à chaque
    version publiée, EN MÊME TEMPS que CACHE en haut de sw.js. */
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 
 /* ---------- 1. Les écrans ---------- */
@@ -51,6 +51,8 @@ window.addEventListener('popstate', () => {
   if (nom === 'apropos') afficherVue('apropos');
   else if (nom === 'editeur' && Montage.doc) afficherVue('editeur');
   else {
+    // Retour du téléphone pendant une retouche : elle est abandonnée
+    if (Editeur.outil) Editeur.outil.fermer();
     if (vueActive === 'editeur') Sauvegarde.maintenant();
     afficherVue('accueil');
   }
@@ -196,10 +198,21 @@ const ACTIONS = {
   'fermer-fenetre': (b) => b.closest('dialog').close(),
 
   // Éditeur : barre du haut
-  'accueil': () => { Sauvegarde.maintenant(); allerVers('accueil'); },
-  'annuler': () => { if (!Historique.annuler()) Message.montrer('Rien à annuler.'); },
-  'retablir': () => { if (!Historique.retablir()) Message.montrer('Rien à rétablir.'); },
-  'ouvrir-export': () => Export.ouvrir(),
+  'accueil': () => { if (!Retouche.verifierLibre()) return; Sauvegarde.maintenant(); allerVers('accueil'); },
+  'annuler': () => {
+    // Pendant une retouche, « Annuler » retire d'abord le dernier œil / point
+    const outil = Editeur.outil;
+    if (outil) {
+      if (outil.retirerDernier()) return;
+      outil.fermer();
+    }
+    if (!Historique.annuler()) Message.montrer('Rien à annuler.');
+  },
+  'retablir': () => {
+    if (Editeur.outil && !Retouche.verifierLibre()) return;
+    if (!Historique.retablir()) Message.montrer('Rien à rétablir.');
+  },
+  'ouvrir-export': () => { if (Retouche.verifierLibre()) Export.ouvrir(); },
   'enregistrer': () => Export.enregistrer(),
   'partager': () => Export.partager(),
 
@@ -226,6 +239,24 @@ const ACTIONS = {
     Message.montrer('Calque supprimé. « Annuler » le fait revenir.');
   })),
   'deverrouiller': () => avecChoisi((c) => Montage.modifier(c.id, { verrouille: false })),
+
+  // Retouches (retouches.js)
+  'outil-yeux': () => Retouche.ouvrir(OutilYeux),
+  'outil-decoupe': () => Retouche.ouvrir(OutilDecoupe),
+  'outil-fermer': (b) => {
+    const outil = Editeur.outil;
+    if (!outil) return;
+    if (outil.aDuTravail()) armerBouton(b, 'Toucher encore : abandonner', () => outil.fermer());
+    else outil.fermer();
+  },
+  'yeux-comparer': () => OutilYeux.basculerComparaison(),
+  'yeux-retirer': () => OutilYeux.retirerDernier(),
+  'yeux-valider': () => OutilYeux.valider(),
+  'decoupe-retirer': () => OutilDecoupe.retirerDernier(),
+  'decoupe-effacer': (b) => armerBouton(b, 'Toucher encore', () => OutilDecoupe.toutEffacer()),
+  'decoupe-apercu': () => OutilDecoupe.voirApercu(),
+  'decoupe-reprendre': () => OutilDecoupe.reprendre(),
+  'decoupe-valider': () => OutilDecoupe.valider(),
 
   // Fenêtre « Calques »
   'choisir-calque': (b) => { Montage.choisir(b.dataset.id); $('#fenetre-calques').close(); },
@@ -259,8 +290,8 @@ document.addEventListener('keydown', (e) => {
   if (vueActive !== 'editeur' || !(e.ctrlKey || e.metaKey)) return;
   if (document.querySelector('dialog[open]')) return;
   const t = e.key.toLowerCase();
-  if (t === 'z' && !e.shiftKey) { e.preventDefault(); Historique.annuler(); }
-  else if (t === 'y' || (t === 'z' && e.shiftKey)) { e.preventDefault(); Historique.retablir(); }
+  if (t === 'z' && !e.shiftKey) { e.preventDefault(); ACTIONS.annuler(); }
+  else if (t === 'y' || (t === 'z' && e.shiftKey)) { e.preventDefault(); ACTIONS.retablir(); }
 });
 
 
@@ -353,6 +384,11 @@ async function demarrer() {
   $('#fichier-photo').addEventListener('change', (e) => Accueil.ouvrirPhoto(e.target.files[0]));
   $('#fichier-camera').addEventListener('change', (e) => Accueil.ouvrirPhoto(e.target.files[0]));
   $('#fichier-calque').addEventListener('change', (e) => ajouterImageCalque(e.target.files[0]));
+
+  // Réglages des outils de retouche
+  $('#y-taille').addEventListener('input', () => OutilYeux.montrerReglage());
+  $('#outil-decoupe').addEventListener('change', () => { if (Editeur.outil === OutilDecoupe) OutilDecoupe._maj(); });
+  $('#d-adoucir').addEventListener('input', () => OutilDecoupe.majPanneau());
 
   // On sauvegarde quand l'application passe en arrière-plan
   document.addEventListener('visibilitychange', () => {

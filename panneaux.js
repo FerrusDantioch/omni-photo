@@ -49,13 +49,17 @@ const Panneaux = {
   majPanneau() {
     if (!Montage.doc) return;
     const c = Montage.calqueChoisi();
-    $('#outils-generaux').hidden = !!c;
-    $('#outils-calque').hidden = !c;
-    if (c) {
+    const enRetouche = !!Editeur.outil;   // un outil de retouche a son propre panneau
+    $('#outils-generaux').hidden = !!c || enRetouche;
+    $('#outils-calque').hidden = !c || enRetouche;
+    for (const panneau of $$('.panneau-outil')) panneau.hidden = !enRetouche || panneau.id !== Editeur.outil.panneau;
+    if (enRetouche && Editeur.outil.majPanneau) Editeur.outil.majPanneau();
+    if (c && !enRetouche) {
       $('#nom-calque').textContent = this.nomAffiche(c);
       $('#calque-verrouille').hidden = !c.verrouille;
       $('#reglages-calque').hidden = c.verrouille;
       $('#btn-modifier-texte').hidden = c.type !== 'texte';
+      $('#retouches-calque').hidden = c.type !== 'image';
       const { largeur } = Rendu.tailleCalque(c);
       this._valeur('#r-taille', Math.round((largeur * c.echelle * 100) / Montage.doc.largeur));
       this._valeur('#r-rotation', Math.round(c.rotation));

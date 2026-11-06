@@ -263,6 +263,11 @@ body[data-vue="editeur"] main { padding: 0; max-width: none; }
   gap: 6px;
 }
 .grille-outils.trois { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 6px; }
+.grille-outils.deux { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 6px; }
+#outils-generaux .grille-outils { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.panneau-outil { display: flex; flex-direction: column; gap: 4px; }
+.panneau-outil .choix-groupe { margin-top: 4px; }
+.etat-outil { font-weight: 600; color: var(--halo); font-size: 0.95rem; min-height: 1.4em; }
 .astuce { margin-top: 8px; font-size: 0.86rem; }
 
 .tete-calque { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
@@ -281,6 +286,7 @@ body[data-vue="editeur"] main { padding: 0; max-width: none; }
   .panneau { max-height: none; border-top: 0; border-left: 1px solid var(--trait); padding: 14px; }
   .grille-outils { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grille-outils.trois { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #outils-generaux .grille-outils { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grille-outils .bouton.outil { flex-direction: row; justify-content: flex-start; gap: 10px; padding-left: 12px; font-size: 0.95rem; }
 }
 
@@ -463,6 +469,9 @@ textarea {
 }
 .message p { flex: 1; font-size: 0.98rem; }
 .message[data-type="erreur"] { border-left-color: var(--or); }
+/* Dans l'éditeur, le message s'affiche en haut de la photo : en bas, il
+   cacherait les boutons du panneau (« Valider »…). */
+body[data-vue="editeur"] .message { top: calc(78px + env(safe-area-inset-top)); bottom: auto; }
 
 .patience {
   position: fixed; inset: 0; z-index: 60;

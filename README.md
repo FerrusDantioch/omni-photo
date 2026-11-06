@@ -13,7 +13,7 @@ Application de l'Omni-système, par Ferrus Dantioch.
 
 ## Ce que fait l'application
 
-État actuel : **étape 1 sur 3** (version 0.1.0).
+État actuel : **étape 2 sur 3** (version 0.2.0).
 
 | Fonction | État |
 |---|---|
@@ -26,7 +26,8 @@ Application de l'Omni-système, par Ferrus Dantioch.
 | Annuler / Rétablir (30 niveaux) | ✅ |
 | Sauvegarde automatique du montage en cours (« Reprendre mon montage ») | ✅ |
 | Page « À propos » (auteur, version, licences) | ✅ |
-| Yeux rouges, découpe manuelle de silhouette | étape 2 |
+| Yeux rouges : toucher l'œil, zone réglable, aperçu avant / après, puis valider | ✅ |
+| Découpe de silhouette au doigt (tracé libre ou points), zoom pour la précision, garder l'intérieur ou l'extérieur, bord doux, aperçu | ✅ |
 | Retrait du fond par IA locale, retouche du détourage, nouvel arrière-plan | étape 3 |
 
 Les très grandes photos sont réduites à 4 096 pixels de côté pour rester
@@ -47,11 +48,15 @@ ouvrir l'adresse dans **Google Chrome** sur le téléphone :
 4. Touchez « Image » pour ajouter un logo ou une autre photo par-dessus.
 5. Touchez « Calques » pour changer l'ordre, masquer ou verrouiller.
 6. Essayez « Annuler » et « Rétablir ».
-7. Touchez « Exporter », choisissez PNG ou JPG, puis « Enregistrer dans le
+7. Touchez « Yeux rouges », puis le centre d'un œil rouge : l'aperçu apparaît.
+   « Voir l'original » compare, « Valider » garde la correction.
+8. Touchez « Découper », tracez le contour du sujet au doigt (zoomez à deux
+   doigts pour la précision), puis « Aperçu » et « Valider la découpe ».
+9. Touchez « Exporter », choisissez PNG ou JPG, puis « Enregistrer dans le
    téléphone » : l'image arrive dans le dossier « Téléchargements ».
-8. Pour installer l'application : bouton « Installer Omni-Photo » sur l'accueil,
+10. Pour installer l'application : bouton « Installer Omni-Photo » sur l'accueil,
    ou menu ⋮ de Chrome → « Ajouter à l'écran d'accueil ».
-9. Pour vérifier le hors ligne : mettez le téléphone en mode avion, puis
+11. Pour vérifier le hors ligne : mettez le téléphone en mode avion, puis
    rouvrez Omni-Photo.
 
 ## Publier sur GitHub Pages
@@ -80,6 +85,7 @@ Tous les fichiers sont à la racine (plus simple à envoyer depuis un téléphon
 | `rendu.js` | le dessin du montage (le même à l'écran et dans le fichier exporté) |
 | `editeur.js` | la zone de travail et les gestes au doigt |
 | `panneaux.js` | les réglages du calque, la liste des calques, la fenêtre « Texte » |
+| `retouches.js` | les yeux rouges et la découpe de silhouette |
 | `export.js` | la fabrication du fichier PNG ou JPG |
 | `sauvegarde.js` | la sauvegarde automatique dans le téléphone |
 | `polices.js` | la liste des polices |
@@ -92,7 +98,7 @@ Tous les fichiers sont à la racine (plus simple à envoyer depuis un téléphon
 ## Tests automatiques (sur ordinateur)
 
 Ils ouvrent l'application dans un vrai navigateur qui imite un téléphone, puis
-une tablette, et vérifient plus de 80 points : ouverture de photos, textes,
+une tablette, et vérifient plus de 120 points : ouverture de photos, textes,
 gestes, annuler, export, sauvegarde, hors ligne, messages d'erreur…
 
 ```bash

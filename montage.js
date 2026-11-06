@@ -287,7 +287,9 @@ const Historique = {
 
   majBoutons() {
     const a = $('[data-action="annuler"]'), r = $('[data-action="retablir"]');
-    if (a) a.disabled = !this.peutAnnuler();
+    // Pendant une retouche, « Annuler » sert aussi à retirer le dernier œil / point
+    const retoucheEnCours = typeof Retouche !== 'undefined' && Retouche.enCours();
+    if (a) a.disabled = !this.peutAnnuler() && !retoucheEnCours;
     if (r) r.disabled = !this.peutRetablir();
   }
 };

@@ -29,7 +29,7 @@ const Editeur = {
   _pointeurs: new Map(),        // doigts posés : numéro → { x, y }
   _geste: null,
   _dessinDemande: false,
-  outil: null,                  // outil spécial des étapes suivantes (yeux rouges…)
+  outil: null,                  // outil de retouche ouvert (yeux rouges, découpe…), voir retouches.js
 
   RAYON_POIGNEE: 18,            // en pixels d'écran
   ZONE_POIGNEE: 34,             // zone de toucher autour de la poignée
@@ -172,6 +172,44 @@ const Editeur = {
     return { x: x * this.vue.e + this.vue.x, y: y * this.vue.e + this.vue.y };
   },
 
+  /* D'un point de l'écran vers un pixel de l'IMAGE d'un calque (en
+     tenant compte de son déplacement, de sa taille, de sa rotation et de
+     son retournement). Sert aux retouches : yeux rouges, découpe… */
+  ecranVersCalque(c, xEcran, yEcran) {
+    const p = this.ecranVersMontage(xEcran, yEcran);
+    const a = (-c.rotation * Math.PI) / 180;
+    const dx = p.x - c.x, dy = p.y - c.y;
+    let lx = (dx * Math.cos(a) - dy * Math.sin(a)) / c.echelle;
+    let ly = (dx * Math.sin(a) + dy * Math.cos(a)) / c.echelle;
+    if (c.miroirH) lx = -lx;
+    if (c.miroirV) ly = -ly;
+    return { x: lx + c.largeur / 2, y: ly + c.hauteur / 2 };
+  },
+
+  /* L'inverse : d'un pixel de l'image d'un calque vers l'écran. */
+  calqueVersEcran(c, px, py) {
+    let lx = (px - c.largeur / 2) * c.echelle, ly = (py - c.hauteur / 2) * c.echelle;
+    if (c.miroirH) lx = -lx;
+    if (c.miroirV) ly = -ly;
+    const a = (c.rotation * Math.PI) / 180;
+    return this.montageVersEcran(c.x + lx * Math.cos(a) - ly * Math.sin(a), c.y + lx * Math.sin(a) + ly * Math.cos(a));
+  },
+
+  /* Combien de pixels d'écran pour un pixel de l'image du calque. */
+  zoomCalque(c) {
+    return this.vue.e * c.echelle;
+  },
+
+  /* Ouvre ou ferme un outil de retouche. */
+  choisirOutil(outil) {
+    this.outil = outil || null;
+    this._geste = null;
+    this._pointeurs.clear();
+    Panneaux.majPanneau();
+    Historique.majBoutons();
+    this.redessiner();
+  },
+
   /* Les 4 coins d'un calque, en pixels d'écran (haut-gauche, haut-droite,
      bas-droite, bas-gauche, tels qu'on les voit). */
   coinsEcran(c) {
@@ -226,13 +264,32 @@ const Editeur = {
     const p = this._position(e);
     this._pointeurs.set(e.pointerId, p);
 
-    // Un outil spécial (étapes suivantes) reçoit les doigts à la place
-    if (this.outil && this.outil.appui) { this.outil.appui(p, e, this._pointeurs); return; }
+    // Un outil de retouche est ouvert (yeux rouges, découpe…) : un doigt
+    // est pour l'outil, deux doigts zooment et déplacent la vue.
+    if (this.outil) { this._appuiOutil(p); return; }
 
     if (this._pointeurs.size === 1) {
       this._commencerUnDoigt(p);
     } else if (this._pointeurs.size === 2) {
       this._commencerDeuxDoigts();
+    }
+  },
+
+  _appuiOutil(p) {
+    if (this._pointeurs.size === 1) {
+      // L'outil prend le doigt (tracé, point déplacé)… ou non : alors le
+      // doigt déplace la vue, et un simple toucher est donné à l'outil.
+      if (this.outil.appui && this.outil.appui(p)) this._geste = { type: 'outil', depart: p };
+      else this._geste = { type: 'vue', depart: p, bouge: false, vx: this.vue.x, vy: this.vue.y, pourOutil: true };
+    } else if (this._pointeurs.size === 2) {
+      // Un 2e doigt arrive pendant un tracé : ce n'était pas un tracé,
+      // mais le début d'un zoom. L'outil oublie ce bout de trait.
+      if (this._geste && this._geste.type === 'outil' && this.outil.interrompre) this.outil.interrompre();
+      const [a, b] = [...this._pointeurs.values()];
+      this._geste = {
+        type: 'deux-vue', milieu: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+        distance: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), vue: { ...this.vue }
+      };
     }
   },
 
@@ -280,9 +337,9 @@ const Editeur = {
     e.preventDefault();
     const p = this._position(e);
     this._pointeurs.set(e.pointerId, p);
-    if (this.outil && this.outil.mouvement) { this.outil.mouvement(p, e, this._pointeurs); return; }
     const g = this._geste;
     if (!g) return;
+    if (g.type === 'outil') { if (this._pointeurs.size === 1 && this.outil) this.outil.mouvement(p); return; }
 
     if (g.depart && !g.bouge && Math.hypot(p.x - g.depart.x, p.y - g.depart.y) > 6) g.bouge = true;
 
@@ -338,7 +395,6 @@ const Editeur = {
   _relache(e, annule = false) {
     if (!this._pointeurs.has(e.pointerId)) return;
     this._pointeurs.delete(e.pointerId);
-    if (this.outil && this.outil.relache) { this.outil.relache(this._position(e), e, this._pointeurs, annule); return; }
     const g = this._geste;
 
     if (this._pointeurs.size > 0) {
@@ -349,6 +405,16 @@ const Editeur = {
     }
     this._geste = null;
     if (!g) return;
+
+    if (g.type === 'outil') {
+      if (this.outil && this.outil.relache) this.outil.relache(this._position(e), annule);
+      return;
+    }
+    if (g.pourOutil) {
+      // Un simple toucher avec un outil ouvert : c'est pour l'outil
+      if (!annule && !g.bouge && this.outil && this.outil.toucher) this.outil.toucher(this._position(e));
+      return;
+    }
 
     if (!annule && !g.bouge) {
       // Un simple toucher (sans glisser)

@@ -13,7 +13,7 @@ Application de l'Omni-système, par Ferrus Dantioch.
 
 ## Ce que fait l'application
 
-État actuel : **étape 2 sur 3** (version 0.2.0).
+État actuel : **les trois étapes sont terminées** (version 1.0.0).
 
 | Fonction | État |
 |---|---|
@@ -28,10 +28,21 @@ Application de l'Omni-système, par Ferrus Dantioch.
 | Page « À propos » (auteur, version, licences) | ✅ |
 | Yeux rouges : toucher l'œil, zone réglable, aperçu avant / après, puis valider | ✅ |
 | Découpe de silhouette au doigt (tracé libre ou points), zoom pour la précision, garder l'intérieur ou l'extérieur, bord doux, aperçu | ✅ |
-| Retrait du fond par IA locale, retouche du détourage, nouvel arrière-plan | étape 3 |
+| Retrait du fond par IA, **dans le téléphone** (modèle U²-Netp), avec barre de progression et bouton « Arrêter » | ✅ |
+| Retouche du détourage : pinceau « Restaurer » et gomme, taille et douceur réglables, fond retiré visible en transparence | ✅ |
+| Nouvel arrière-plan : couleur unie, dégradé (4 directions) ou photo de la galerie ; sujet déplaçable et redimensionnable | ✅ |
 
 Les très grandes photos sont réduites à 4 096 pixels de côté pour rester
-fluides sur un téléphone milieu de gamme (un message le signale). Les messages
+fluides sur un téléphone milieu de gamme (un message le signale).
+
+Le détourage par IA travaille sur une copie réduite (320 pixels pour trouver
+le sujet, 1 024 pixels pour recaler les bords sur la photo), puis le résultat
+est appliqué à la photo **en taille réelle** : la qualité de l'image n'est pas
+réduite. Il faut compter 2 à 6 secondes sur un téléphone milieu de gamme.
+
+**Première ouverture :** l'application télécharge environ 20 Mo (dont 19 Mo
+pour l'intelligence artificielle), une seule fois. Ensuite, tout marche sans
+internet, détourage compris. Les messages
 d'erreur (format non pris en charge comme le HEIC, fichier vide, manque de
 mémoire…) sont en français et expliquent quoi faire.
 
@@ -52,12 +63,20 @@ ouvrir l'adresse dans **Google Chrome** sur le téléphone :
    « Voir l'original » compare, « Valider » garde la correction.
 8. Touchez « Découper », tracez le contour du sujet au doigt (zoomez à deux
    doigts pour la précision), puis « Aperçu » et « Valider la découpe ».
-9. Touchez « Exporter », choisissez PNG ou JPG, puis « Enregistrer dans le
-   téléphone » : l'image arrive dans le dossier « Téléchargements ».
-10. Pour installer l'application : bouton « Installer Omni-Photo » sur l'accueil,
+9. Ouvrez une photo d'une personne ou d'un objet, touchez « Détourer » :
+   la barre de progression avance, puis l'aperçu montre le fond retiré
+   (damier). Touchez « Valider et retoucher ».
+10. Avec le pinceau : « Gommer » efface ce qui reste du fond, « Restaurer »
+    fait revenir une partie coupée (cheveux…). Zoomez à deux doigts pour les
+    détails. Touchez « Valider ».
+11. Touchez « Fond » : essayez une couleur, un dégradé, puis une photo de
+    votre galerie. Touchez « Terminé », puis déplacez et pincez le sujet.
+12. Touchez « Exporter », choisissez PNG ou JPG, puis « Enregistrer dans le
+    téléphone » : l'image arrive dans le dossier « Téléchargements ».
+13. Pour installer l'application : bouton « Installer Omni-Photo » sur l'accueil,
    ou menu ⋮ de Chrome → « Ajouter à l'écran d'accueil ».
-11. Pour vérifier le hors ligne : mettez le téléphone en mode avion, puis
-   rouvrez Omni-Photo.
+14. Pour vérifier le hors ligne : mettez le téléphone en mode avion, puis
+    rouvrez Omni-Photo et essayez « Détourer ».
 
 ## Publier sur GitHub Pages
 
@@ -85,7 +104,12 @@ Tous les fichiers sont à la racine (plus simple à envoyer depuis un téléphon
 | `rendu.js` | le dessin du montage (le même à l'écran et dans le fichier exporté) |
 | `editeur.js` | la zone de travail et les gestes au doigt |
 | `panneaux.js` | les réglages du calque, la liste des calques, la fenêtre « Texte » |
-| `retouches.js` | les yeux rouges et la découpe de silhouette |
+| `retouches.js` | les yeux rouges, la découpe de silhouette, le pinceau « Restaurer » et la gomme |
+| `ia.js` | le détourage par IA : préparation, barre de progression, application du masque |
+| `detourage-travail.js` | le « travailleur » qui fait tourner l'IA à côté de la page (écran fluide) |
+| `fond.js` | le nouvel arrière-plan (couleur, dégradé, photo) |
+| `ort.wasm.bundle.min.mjs`, `ort-wasm-simd-threaded.wasm` | le moteur ONNX Runtime Web (licence MIT) |
+| `u2netp.onnx` | le modèle d'IA U²-Netp (licence Apache 2.0) |
 | `export.js` | la fabrication du fichier PNG ou JPG |
 | `sauvegarde.js` | la sauvegarde automatique dans le téléphone |
 | `polices.js` | la liste des polices |
@@ -98,7 +122,7 @@ Tous les fichiers sont à la racine (plus simple à envoyer depuis un téléphon
 ## Tests automatiques (sur ordinateur)
 
 Ils ouvrent l'application dans un vrai navigateur qui imite un téléphone, puis
-une tablette, et vérifient plus de 120 points : ouverture de photos, textes,
+une tablette, et vérifient 167 points : ouverture de photos, textes,
 gestes, annuler, export, sauvegarde, hors ligne, messages d'erreur…
 
 ```bash
@@ -116,5 +140,5 @@ node tests/tester.js
 ## Licence
 
 © 2026 Ferrus Dantioch — Creative Commons BY-NC-ND 4.0 (voir [LICENSE](LICENSE)).
-Les polices incluses gardent leur propre licence (Apache 2.0) : voir
-[LICENCES-TIERS.md](LICENCES-TIERS.md).
+Les polices, le moteur ONNX Runtime Web (MIT) et le modèle U²-Netp (Apache 2.0)
+gardent leur propre licence : voir [LICENCES-TIERS.md](LICENCES-TIERS.md).

@@ -21,6 +21,11 @@ const Rendu = {
      retouche n'est pas validée. */
   remplacements: new Map(),
 
+  /* Pendant la retouche au pinceau : l'image d'origine montrée en
+     transparence sous le sujet (pour voir ce qu'on peut restaurer).
+     Écran seulement. */
+  fantomes: new Map(),
+
   _ctxMesure() {
     if (!this._mesureur) this._mesureur = document.createElement('canvas').getContext('2d');
     return this._mesureur;
@@ -75,13 +80,19 @@ const Rendu = {
   dessinerMontage(ctx, doc, options = {}) {
     for (const c of doc.calques) {
       if (!c.visible) continue;
-      this.dessinerCalque(ctx, c, options);
+      this.dessinerCalque(ctx, c, { ...options, doc });
     }
   },
 
   dessinerCalque(ctx, c, options = {}) {
     ctx.save();
     ctx.globalAlpha = limiter(c.opacite, 0, 1);
+    // Le fond remplit toute l'image, sans déplacement ni rotation (fond.js)
+    if (c.type === 'fond') {
+      if (options.doc) dessinerFond(ctx, c, options.doc, options);
+      ctx.restore();
+      return;
+    }
     ctx.translate(c.x, c.y);
     ctx.rotate((c.rotation * Math.PI) / 180);
     ctx.scale(c.echelle * (c.miroirH ? -1 : 1), c.echelle * (c.miroirV ? -1 : 1));
@@ -91,11 +102,16 @@ const Rendu = {
       // Pendant une retouche, l'écran montre l'aperçu (pas encore validé)
       const apercu = options.ecran && this.remplacements.get(c.ressource);
       const image = apercu || (options.ecran ? Ressources.pourEcran(c.ressource, largeurEcran) : (Ressources.obtenir(c.ressource) || {}).image);
-      if (image) {
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(image, -c.largeur / 2, -c.hauteur / 2, c.largeur, c.hauteur);
+      const fantome = options.ecran && this.fantomes.get(c.ressource);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      if (fantome) {
+        const alpha = ctx.globalAlpha;
+        ctx.globalAlpha = alpha * 0.3;
+        ctx.drawImage(fantome, -c.largeur / 2, -c.hauteur / 2, c.largeur, c.hauteur);
+        ctx.globalAlpha = alpha;
       }
+      if (image) ctx.drawImage(image, -c.largeur / 2, -c.hauteur / 2, c.largeur, c.hauteur);
     } else if (c.type === 'texte') {
       this._dessinerTexte(ctx, c);
     }

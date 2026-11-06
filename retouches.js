@@ -24,7 +24,7 @@ const Retouche = {
   cible() {
     const c = Montage.calqueChoisi();
     if (c && c.type === 'image' && c.visible) return c;
-    return Montage.doc.calques.find((x) => x.type === 'image' && x.visible) || null;
+    return Montage.doc.calques.find((x) => x.type === 'image' && x.visible) || null;   // (un « fond » n'est pas une image)
   },
 
   /* Une copie modifiable de l'image d'un calque. */
@@ -38,9 +38,9 @@ const Retouche = {
 
   /* Ouvre un outil sur l'image du bon calque. Renvoie faux s'il n'y a
      pas d'image à retoucher. */
-  ouvrir(outil) {
+  ouvrir(outil, calque) {
     if (Editeur.outil) Editeur.outil.fermer(true);
-    const c = this.cible();
+    const c = calque || this.cible();
     if (!c) {
       Message.erreur('Il n\'y a aucune image à retoucher. Ouvre d\'abord une photo, ou ajoute une image.');
       return false;
@@ -53,11 +53,19 @@ const Retouche = {
   },
 
   /* Range l'image retouchée et la met à la place de l'ancienne
-     (une étape d'« Annuler »). */
-  valider(c, toile) {
+     (une étape d'« Annuler »).
+     « garderSource » : pour un détourage, on retient l'image d'origine
+     (calque.source), pour que le pinceau « Restaurer » puisse la faire
+     revenir. « source » : une nouvelle image d'origine (yeux rouges
+     corrigés aussi sur l'origine). */
+  valider(c, toile, { garderSource = false, source = null } = {}) {
     const id = Ressources.depuisToile(toile);
     Rendu.remplacements.clear();
-    Historique.action(() => Montage.modifier(c.id, { ressource: id }));
+    Rendu.fantomes.clear();
+    const changements = { ressource: id };
+    if (garderSource && !c.source) changements.source = c.ressource;
+    if (source) changements.source = source;
+    Historique.action(() => Montage.modifier(c.id, changements));
   },
 
   /* Y a-t-il une retouche commencée et pas encore validée ? */
@@ -176,7 +184,19 @@ const OutilYeux = {
   valider() {
     if (!this.corrections.length) { this.fermer(); return; }
     const n = this.corrections.length;
-    Retouche.valider(this.calque, this.travail);
+    // Sujet détouré : on corrige aussi son image d'origine, sinon le
+    // pinceau « Restaurer » ferait revenir les yeux rouges.
+    let source = null;
+    if (this.calque.source && Ressources.obtenir(this.calque.source)) {
+      try {
+        const r = Ressources.obtenir(this.calque.source);
+        const { toile, ctx } = nouvelleToile(r.largeur, r.hauteur);
+        ctx.drawImage(r.image, 0, 0);
+        for (const k of this.corrections) corrigerYeuxRouges(ctx, k.x, k.y, k.rayon);
+        source = Ressources.depuisToile(toile);
+      } catch (e) { /* pas de mémoire : l'origine garde ses yeux */ }
+    }
+    Retouche.valider(this.calque, this.travail, { source });
     this.travail = null;
     this.corrections = [];
     this.fermer();
@@ -522,7 +542,7 @@ const OutilDecoupe = {
 
   valider() {
     if (!this.apercu) { this.voirApercu(); if (!this.apercu) return; }
-    Retouche.valider(this.calque, this.apercu);
+    Retouche.valider(this.calque, this.apercu, { garderSource: true });
     const exterieur = this.garder() === 'exterieur';
     this.apercu = null;
     this.points = [];
@@ -599,5 +619,256 @@ const OutilDecoupe = {
       });
     }
     ctx.restore();
+  }
+};
+
+
+/* ============================================================
+   PINCEAU « RESTAURER » ET GOMME
+   Pour corriger un détourage (IA ou découpe) : la gomme rend
+   transparent, le pinceau « Restaurer » fait revenir la photo
+   d'origine (cheveux coupés, bord oublié…).
+
+   Comment ça marche : on garde la photo d'origine (calque.source) et un
+   « masque » qui dit, pour chaque pixel, à quel point il est gardé. Le
+   pinceau ajoute du masque, la gomme en retire. L'image affichée =
+   l'origine, là où le masque le permet.
+   ============================================================ */
+
+const OutilPinceau = {
+  panneau: 'outil-pinceau',
+  calque: null,
+  source: null,        // l'image d'origine (avant détourage)
+  masque: null,        // toile : son opacité = ce qui est gardé
+  rendu: null,         // toile : l'aperçu (origine + masque)
+  traits: [],          // [{ mode, rayon, douceur, points: [{x, y}] }]
+  _trait: null,
+  _curseur: null,      // dernier endroit du doigt (pour montrer le pinceau)
+
+  commencer(c) {
+    this.calque = c;
+    this.traits = [];
+    this._trait = null;
+    this._curseur = null;
+    this.masque = null;
+    this.rendu = null;
+    const origine = Ressources.obtenir(c.source || c.ressource);
+    this.source = origine ? origine.image : null;
+    // Le fond retiré est montré en transparence, pour savoir où restaurer
+    if (c.source && origine) Rendu.fantomes.set(c.ressource, this.source);
+    if (!c.source) {
+      Message.montrer('Cette image n\'a pas encore été détourée : seule la gomme a un effet. Utilise d\'abord « Détourer » ou « Découper ».');
+    }
+  },
+
+  aDuTravail() {
+    return this.traits.length > 0;
+  },
+
+  mode() {
+    return ($('input[name="p-mode"]:checked') || {}).value === 'gommer' ? 'gommer' : 'restaurer';
+  },
+
+  /* Prépare les deux toiles de travail (au premier coup de pinceau
+     seulement : elles prennent de la mémoire). */
+  _preparer() {
+    if (this.masque) return;
+    const c = this.calque;
+    const actuelle = Ressources.obtenir(c.ressource);
+    const { toile: masque, ctx: m } = nouvelleToile(actuelle.largeur, actuelle.hauteur);
+    if (c.source) m.drawImage(actuelle.image, 0, 0);          // le masque = ce qui est gardé aujourd'hui
+    else { m.fillStyle = '#000'; m.fillRect(0, 0, masque.width, masque.height); }
+    const { toile: rendu } = nouvelleToile(actuelle.largeur, actuelle.hauteur);
+    this.masque = masque;
+    this.rendu = rendu;
+    this._recomposer(0, 0, masque.width, masque.height);
+    Rendu.remplacements.set(c.ressource, this.rendu);
+  },
+
+  /* Refait l'aperçu dans un rectangle : l'origine, gardée selon le masque. */
+  _recomposer(x, y, l, h) {
+    x = Math.max(0, Math.floor(x)); y = Math.max(0, Math.floor(y));
+    l = Math.min(this.rendu.width - x, Math.ceil(l) + 1); h = Math.min(this.rendu.height - y, Math.ceil(h) + 1);
+    if (l <= 0 || h <= 0) return;
+    const ctx = this.rendu.getContext('2d');
+    ctx.clearRect(x, y, l, h);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(this.source, x, y, l, h, x, y, l, h);
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(this.masque, x, y, l, h, x, y, l, h);
+    ctx.globalCompositeOperation = 'source-over';
+  },
+
+  /* Une « touche » ronde du pinceau sur le masque. */
+  _tamponner(trait, x, y) {
+    const m = this.masque.getContext('2d');
+    const r = trait.rayon;
+    const degrade = m.createRadialGradient(x, y, r * (1 - trait.douceur), x, y, r);
+    degrade.addColorStop(0, 'rgba(0,0,0,1)');
+    degrade.addColorStop(1, 'rgba(0,0,0,0)');
+    m.globalCompositeOperation = trait.mode === 'gommer' ? 'destination-out' : 'source-over';
+    m.fillStyle = degrade;
+    m.beginPath();
+    m.arc(x, y, r, 0, Math.PI * 2);
+    m.fill();
+    m.globalCompositeOperation = 'source-over';
+  },
+
+  /* Peint d'un point à l'autre (des touches rapprochées, pour un trait continu). */
+  _segment(trait, a, b) {
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    const pas = Math.max(0.5, trait.rayon * 0.25);
+    const n = Math.max(1, Math.ceil(d / pas));
+    for (let i = 1; i <= n; i++) this._tamponner(trait, a.x + ((b.x - a.x) * i) / n, a.y + ((b.y - a.y) * i) / n);
+    const r = trait.rayon + 2;
+    this._recomposer(Math.min(a.x, b.x) - r, Math.min(a.y, b.y) - r, Math.abs(b.x - a.x) + r * 2, Math.abs(b.y - a.y) + r * 2);
+  },
+
+  appui(p) {
+    try { this._preparer(); } catch (e) { Message.erreur(MESSAGES_PHOTO.memoire); return false; }
+    const c = this.calque;
+    const point = Editeur.ecranVersCalque(c, p.x, p.y);
+    this._trait = {
+      mode: this.mode(),
+      rayon: Math.max(0.5, Number($('#p-taille').value) / Editeur.zoomCalque(c)),
+      douceur: Number($('#p-douceur').value) / 100,
+      points: [point]
+    };
+    this.traits.push(this._trait);
+    this._tamponner(this._trait, point.x, point.y);
+    const r = this._trait.rayon + 2;
+    this._recomposer(point.x - r, point.y - r, r * 2, r * 2);
+    this._curseur = p;
+    this._maj();
+    return true;
+  },
+
+  mouvement(p) {
+    const t = this._trait;
+    if (!t) return;
+    const point = Editeur.ecranVersCalque(this.calque, p.x, p.y);
+    const avant = t.points[t.points.length - 1];
+    if (Math.hypot(point.x - avant.x, point.y - avant.y) < t.rayon * 0.15) return;
+    t.points.push(point);
+    this._segment(t, avant, point);
+    this._curseur = p;
+    Editeur.redessiner();
+  },
+
+  relache() {
+    this._trait = null;
+    this._curseur = null;
+    this._maj();
+  },
+
+  /* Un 2e doigt : c'était un zoom, pas un coup de pinceau. */
+  interrompre() {
+    if (this._trait) {
+      this.traits.pop();
+      this._trait = null;
+      this._rejouer();
+    }
+  },
+
+  /* Refait tout le masque depuis le début, sans le dernier trait. */
+  _rejouer() {
+    if (!this.masque) return;
+    const c = this.calque;
+    const m = this.masque.getContext('2d');
+    m.clearRect(0, 0, this.masque.width, this.masque.height);
+    if (c.source) m.drawImage(Ressources.obtenir(c.ressource).image, 0, 0);
+    else { m.fillStyle = '#000'; m.fillRect(0, 0, this.masque.width, this.masque.height); }
+    for (const t of this.traits) {
+      this._tamponnerSansRendu(t);
+    }
+    this._recomposer(0, 0, this.masque.width, this.masque.height);
+    this._maj();
+  },
+
+  _tamponnerSansRendu(t) {
+    this._tamponner(t, t.points[0].x, t.points[0].y);
+    for (let i = 1; i < t.points.length; i++) {
+      const a = t.points[i - 1], b = t.points[i];
+      const d = Math.hypot(b.x - a.x, b.y - a.y);
+      const n = Math.max(1, Math.ceil(d / Math.max(0.5, t.rayon * 0.25)));
+      for (let k = 1; k <= n; k++) this._tamponner(t, a.x + ((b.x - a.x) * k) / n, a.y + ((b.y - a.y) * k) / n);
+    }
+  },
+
+  retirerDernier() {
+    if (!this.traits.length) return false;
+    this.traits.pop();
+    this._rejouer();
+    return true;
+  },
+
+  basculerFantome() {
+    const c = this.calque;
+    if (!c.source) return;
+    if (Rendu.fantomes.has(c.ressource)) Rendu.fantomes.delete(c.ressource);
+    else Rendu.fantomes.set(c.ressource, this.source);
+    this._maj();
+  },
+
+  valider() {
+    if (!this.traits.length) { this.fermer(); return; }
+    const toile = this.rendu;
+    this.rendu = null;
+    Retouche.valider(this.calque, toile, { garderSource: true });
+    this.fermer();
+    Message.montrer('Retouche gardée ✓ « Annuler » permet de revenir en arrière.');
+  },
+
+  fermer() {
+    if (this.masque) this.masque.width = 0;
+    if (this.rendu) this.rendu.width = 0;
+    this.masque = null;
+    this.rendu = null;
+    this.traits = [];
+    this._trait = null;
+    Rendu.remplacements.clear();
+    Rendu.fantomes.clear();
+    if (Editeur.outil === this) Editeur.choisirOutil(null);
+  },
+
+  _maj() {
+    this.majPanneau();
+    Historique.majBoutons();
+    Editeur.redessiner();
+  },
+
+  majPanneau() {
+    const n = this.traits.length;
+    $('#p-etat').textContent = n === 0 ? 'Passe le doigt sur les zones à corriger.' : (n === 1 ? '1 trait (aperçu).' : `${n} traits (aperçu).`);
+    $('[data-action="pinceau-retirer"]').disabled = !n;
+    $('[data-action="pinceau-valider"]').disabled = !n;
+    const f = $('[data-action="pinceau-fantome"]');
+    f.disabled = !this.calque || !this.calque.source;
+    const t = f.querySelector('.texte-bouton');
+    if (t) t.textContent = this.calque && Rendu.fantomes.has(this.calque.ressource) ? 'Cacher le fond retiré' : 'Voir le fond retiré';
+    for (const id of ['#p-taille', '#p-douceur']) {
+      const s = $(id).parentElement.querySelector('output');
+      if (s) s.textContent = $(id).value + (id === '#p-taille' ? ' px' : ' %');
+    }
+  },
+
+  /* Le rond du pinceau sous le doigt (ou au centre pendant le réglage). */
+  dessiner(ctx) {
+    let centre = this._curseur;
+    if (!centre && this._reglage) {
+      const zone = Editeur.toile.parentElement;
+      centre = { x: zone.clientWidth / 2, y: zone.clientHeight / 2 };
+    }
+    if (!centre) return;
+    ctx.save();
+    traitDouble(ctx, () => { ctx.beginPath(); ctx.arc(centre.x, centre.y, Number($('#p-taille').value), 0, Math.PI * 2); }, 2);
+    ctx.restore();
+  },
+
+  montrerReglage() {
+    this._reglage = true;
+    clearTimeout(this._minuteurReglage);
+    this._minuteurReglage = setTimeout(() => { this._reglage = false; Editeur.redessiner(); }, 1500);
+    this._maj();
   }
 };

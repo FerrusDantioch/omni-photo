@@ -264,6 +264,7 @@ body[data-vue="editeur"] main { padding: 0; max-width: none; }
 }
 .grille-outils.trois { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 6px; }
 .grille-outils.deux { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 6px; }
+#fenetre-fond .bandeau { margin-top: 4px; border-left-color: var(--or); }
 #outils-generaux .grille-outils { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .panneau-outil { display: flex; flex-direction: column; gap: 4px; }
 .panneau-outil .choix-groupe { margin-top: 4px; }
@@ -479,10 +480,17 @@ body[data-vue="editeur"] .message { top: calc(78px + env(safe-area-inset-top)); 
   background: rgba(16, 13, 24, 0.8);
   padding: 24px;
 }
-.patience p {
+.patience-boite {
+  width: min(420px, 100%);
+  display: flex; flex-direction: column; gap: 14px;
   background: var(--surface); border: var(--carte-bord); border-top: var(--carte-lisere);
-  border-radius: var(--rayon-carte); padding: 20px 24px; font-size: 1.05rem; text-align: center;
+  border-radius: var(--rayon-carte); padding: 20px 22px;
 }
+#patience-texte { font-size: 1.05rem; text-align: center; }
+.progression { display: flex; flex-direction: column; gap: 6px; }
+.progression-piste { height: 12px; border-radius: 6px; background: var(--trait); overflow: hidden; }
+.progression-barre { height: 100%; width: 0; border-radius: 6px; background: var(--accent); transition: width var(--duree) linear; }
+#patience-pourcent { text-align: center; }
 
 /* Le message et « Patiente… » sont des « popover » (voir outils.js) :
    on efface les réglages par défaut du navigateur pour ces éléments. */

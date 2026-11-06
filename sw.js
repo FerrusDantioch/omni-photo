@@ -13,7 +13,7 @@
    de la liste FICHIERS ci-dessous, en même temps que VERSION dans app.js.
    Sinon, les téléphones qui ont déjà ouvert l'application gardent
    l'ancienne version. */
-const CACHE = 'omni-photo-v2';
+const CACHE = 'omni-photo-v3';
 
 /* Le début du nom de cache propre à Omni-Photo. Toutes les applications
    de ferrusdantioch.github.io partagent la même adresse de site, donc le
@@ -35,6 +35,12 @@ const FICHIERS = [
   './editeur.js',
   './panneaux.js',
   './retouches.js',
+  './ia.js',
+  './fond.js',
+  './detourage-travail.js',
+  './ort.wasm.bundle.min.mjs',
+  './ort-wasm-simd-threaded.wasm',
+  './u2netp.onnx',
   './export.js',
   './sauvegarde.js',
   './app.js',

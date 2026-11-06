@@ -238,7 +238,7 @@ const Editeur = {
     const liste = Montage.doc.calques;
     for (let i = liste.length - 1; i >= 0; i--) {
       const c = liste[i];
-      if (c.visible && !c.verrouille && this._touche(c, p.x, p.y)) return c;
+      if (c.visible && !c.verrouille && c.type !== 'fond' && this._touche(c, p.x, p.y)) return c;
     }
     return null;
   },

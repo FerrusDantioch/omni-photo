@@ -156,7 +156,11 @@ const Sauvegarde = {
     Ressources.vider();
     this._rangees.clear();
     let perdues = 0;
-    const ids = new Set(doc.calques.filter((c) => c.ressource).map((c) => c.ressource));
+    const ids = new Set();
+    for (const c of doc.calques) {
+      if (c.ressource) ids.add(c.ressource);
+      if (c.source) ids.add(c.source);
+    }
     for (const id of ids) {
       const enregistre = await Base.lire('images', id);
       try {
@@ -170,6 +174,7 @@ const Sauvegarde = {
     }
     // Les calques dont l'image a disparu sont retirés
     doc.calques = doc.calques.filter((c) => !c.ressource || Ressources.obtenir(c.ressource));
+    for (const c of doc.calques) if (c.source && !Ressources.obtenir(c.source)) delete c.source;
     Montage.doc = doc;
     Montage.selection = null;
     Historique.vider();

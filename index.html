@@ -28,6 +28,8 @@
 <script defer src="./editeur.js"></script>
 <script defer src="./panneaux.js"></script>
 <script defer src="./retouches.js"></script>
+<script defer src="./ia.js"></script>
+<script defer src="./fond.js"></script>
 <script defer src="./export.js"></script>
 <script defer src="./sauvegarde.js"></script>
 <script defer src="./app.js"></script>
@@ -69,6 +71,9 @@
     <symbol id="i-yeux" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3.2" fill="currentColor" fill-opacity=".35"/><path d="M19 3l.6 1.4L21 5l-1.4.6L19 7l-.6-1.4L17 5l1.4-.6z" fill="currentColor" stroke-width="1"/></g></symbol>
     <symbol id="i-ciseaux" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.2 8.2L20 20M8.2 15.8L20 4"/></g></symbol>
     <symbol id="i-comparer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 3v18"/><path d="M3 5h9v14H3z" fill="currentColor" fill-opacity=".3"/></g></symbol>
+    <symbol id="i-magie" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20L15 9"/><path d="M14 4l1 2.5L17.5 7.5 15 8.5 14 11l-1-2.5L10.5 7.5 13 6.5z" fill="currentColor" stroke-width="1"/><path d="M19 13l.6 1.4 1.4.6-1.4.6L19 17l-.6-1.4-1.4-.6 1.4-.6z" fill="currentColor" stroke-width="1"/></g></symbol>
+    <symbol id="i-pinceau" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4l-9 9"/><path d="M11 13c-2-1-5 0-5 3 0 2-1 3-3 4 4 1 9 0 9-4 0-1-.3-2-1-3z" fill="currentColor" fill-opacity=".3"/></g></symbol>
+    <symbol id="i-fond" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" fill-opacity=".25"/><circle cx="12" cy="10" r="3.2" fill="none"/><path d="M6.5 21c.8-3.5 3-5.5 5.5-5.5s4.7 2 5.5 5.5"/></g></symbol>
     <symbol id="i-installer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 7v7M9 11l3 3 3-3"/></g></symbol>
   </defs>
 </svg>
@@ -150,6 +155,9 @@
         <button type="button" class="bouton outil" data-action="ajouter-texte"><svg class="icone" aria-hidden="true"><use href="#i-texte"/></svg>Texte</button>
         <button type="button" class="bouton outil" data-action="ajouter-image"><svg class="icone" aria-hidden="true"><use href="#i-image"/></svg>Image</button>
         <button type="button" class="bouton outil" data-action="ouvrir-calques"><svg class="icone" aria-hidden="true"><use href="#i-calques"/></svg>Calques</button>
+        <button type="button" class="bouton outil" data-action="outil-ia"><svg class="icone" aria-hidden="true"><use href="#i-magie"/></svg>Détourer</button>
+        <button type="button" class="bouton outil" data-action="outil-pinceau"><svg class="icone" aria-hidden="true"><use href="#i-pinceau"/></svg>Pinceau</button>
+        <button type="button" class="bouton outil" data-action="ouvrir-fond"><svg class="icone" aria-hidden="true"><use href="#i-fond"/></svg>Fond</button>
         <button type="button" class="bouton outil" data-action="outil-yeux"><svg class="icone" aria-hidden="true"><use href="#i-yeux"/></svg>Yeux rouges</button>
         <button type="button" class="bouton outil" data-action="outil-decoupe"><svg class="icone" aria-hidden="true"><use href="#i-ciseaux"/></svg>Découper</button>
         <button type="button" class="bouton outil" data-action="voir-tout"><svg class="icone" aria-hidden="true"><use href="#i-voir-tout"/></svg>Voir tout</button>
@@ -185,6 +193,8 @@
         </div>
         <!-- Seulement pour une image : ses retouches -->
         <div id="retouches-calque" class="grille-outils deux">
+          <button type="button" class="bouton outil" data-action="outil-ia"><svg class="icone" aria-hidden="true"><use href="#i-magie"/></svg>Détourer</button>
+          <button type="button" class="bouton outil" data-action="outil-pinceau"><svg class="icone" aria-hidden="true"><use href="#i-pinceau"/></svg>Pinceau</button>
           <button type="button" class="bouton outil" data-action="outil-yeux"><svg class="icone" aria-hidden="true"><use href="#i-yeux"/></svg>Yeux rouges</button>
           <button type="button" class="bouton outil" data-action="outil-decoupe"><svg class="icone" aria-hidden="true"><use href="#i-ciseaux"/></svg>Découper</button>
         </div>
@@ -206,6 +216,46 @@
         <button type="button" class="bouton outil" data-action="yeux-retirer"><svg class="icone" aria-hidden="true"><use href="#i-annuler"/></svg>Retirer le dernier</button>
         <button type="button" class="bouton outil principal" data-action="yeux-valider"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Valider</button>
       </div>
+    </div>
+
+    <!-- Outil « Détourer » par IA (voir ia.js) -->
+    <div id="outil-ia" class="panneau-outil" hidden>
+      <div class="tete-calque">
+        <p class="nom-choisi">Détourer</p>
+        <button type="button" class="bouton petit" data-action="outil-fermer"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Fermer</button>
+      </div>
+      <p class="aide nom-cible"></p>
+      <p id="ia-etat" class="etat-outil"></p>
+      <p class="aide">L'intelligence artificielle tourne dans ton téléphone : ta photo n'est envoyée nulle part.</p>
+      <div class="grille-outils deux">
+        <button type="button" class="bouton outil" data-action="ia-comparer"><svg class="icone" aria-hidden="true"><use href="#i-comparer"/></svg><span class="texte-bouton">Voir l'original</span></button>
+        <button type="button" class="bouton outil principal" data-action="ia-valider"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Valider</button>
+        <button type="button" class="bouton outil" data-action="ia-pinceau"><svg class="icone" aria-hidden="true"><use href="#i-pinceau"/></svg>Valider et retoucher</button>
+        <button type="button" class="bouton outil" data-action="ia-fond"><svg class="icone" aria-hidden="true"><use href="#i-fond"/></svg>Valider et changer le fond</button>
+      </div>
+    </div>
+
+    <!-- Outil « Pinceau » : restaurer / gommer (voir retouches.js) -->
+    <div id="outil-pinceau" class="panneau-outil" hidden>
+      <div class="tete-calque">
+        <p class="nom-choisi">Pinceau</p>
+        <button type="button" class="bouton petit" data-action="outil-fermer"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Fermer</button>
+      </div>
+      <p class="aide nom-cible"></p>
+      <p id="p-etat" class="etat-outil"></p>
+      <fieldset class="choix-groupe deux">
+        <legend>Le pinceau…</legend>
+        <label class="choix"><input type="radio" name="p-mode" value="restaurer" checked><span>Restaurer<small>fait revenir la photo</small></span></label>
+        <label class="choix"><input type="radio" name="p-mode" value="gommer"><span>Gommer<small>rend transparent</small></span></label>
+      </fieldset>
+      <label class="curseur"><span>Taille</span><input type="range" id="p-taille" min="4" max="120" step="1" value="24"><output></output></label>
+      <label class="curseur"><span>Douceur</span><input type="range" id="p-douceur" min="0" max="100" step="5" value="50"><output></output></label>
+      <div class="grille-outils trois">
+        <button type="button" class="bouton outil" data-action="pinceau-fantome"><svg class="icone" aria-hidden="true"><use href="#i-oeil"/></svg><span class="texte-bouton">Voir le fond retiré</span></button>
+        <button type="button" class="bouton outil" data-action="pinceau-retirer"><svg class="icone" aria-hidden="true"><use href="#i-annuler"/></svg>Retirer le dernier</button>
+        <button type="button" class="bouton outil principal" data-action="pinceau-valider"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Valider</button>
+      </div>
+      <p class="aide astuce">Zoome à deux doigts pour les détails (cheveux, bords). Le fond retiré apparaît en transparence : c'est ce que « Restaurer » peut faire revenir.</p>
     </div>
 
     <!-- Outil « Découper la silhouette » (voir retouches.js) -->
@@ -264,7 +314,9 @@
       </div>
       <p>Un outil de montage photo tout simple, pour ton téléphone et ta tablette : ajouter des textes
          et des images, les déplacer, les agrandir, les tourner, corriger les yeux rouges, découper une
-         silhouette, puis enregistrer le résultat en PNG ou en JPG.</p>
+         silhouette, retirer le fond automatiquement, le remplacer, puis enregistrer le résultat en PNG ou en JPG.</p>
+      <p>Le retrait automatique du fond utilise une intelligence artificielle qui tourne <strong>dans ton
+         appareil</strong> : tes photos ne sont jamais envoyées ailleurs.</p>
       <p><strong>Application gratuite et sans publicité.</strong> Pas de compte, pas de pistage.
          Omni-Photo fonctionne sans connexion : tes photos restent sur ton appareil, rien n'est envoyé sur internet.</p>
     </div>
@@ -307,8 +359,13 @@
         <li><strong>Coming Soon</strong> (« Écriture ») — Open Window</li>
         <li><strong>Satisfy</strong> (« Élégante ») — Font Diner</li>
       </ul>
-      <p class="aide">Aucune bibliothèque de code extérieure n'est utilisée pour l'instant.
-         Les fichiers sont inclus sans modification.</p>
+      <p>Le retrait automatique du fond utilise :</p>
+      <ul class="liste-licences">
+        <li><strong>ONNX Runtime Web</strong> 1.30.0 — Microsoft Corporation — <strong>licence MIT</strong>
+            (texte complet dans le fichier LICENCE-ONNXRUNTIME-MIT.txt)</li>
+        <li><strong>U²-Netp</strong>, modèle de détourage — Xuebin Qin et coll. — <strong>licence Apache 2.0</strong></li>
+      </ul>
+      <p class="aide">Les fichiers sont inclus sans modification. Liste complète : fichier LICENCES-TIERS.md.</p>
     </div>
   </div>
 </section>
@@ -406,6 +463,43 @@
   </div>
 </dialog>
 
+<!-- Nouveau fond (voir fond.js). La photo reste visible au-dessus. -->
+<dialog id="fenetre-fond" class="fenetre feuille" aria-labelledby="titre-fond">
+  <div class="tete-fenetre">
+    <h2 id="titre-fond" tabindex="-1">Nouveau fond</h2>
+    <button type="button" class="bouton petit principal" data-action="fermer-fenetre"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Terminé</button>
+  </div>
+  <p id="b-conseil" class="bandeau" hidden>Le fond se place derrière ta photo : pour le voir, détoure d'abord le sujet avec « Détourer » ou « Découper ».</p>
+  <fieldset class="choix-groupe trois">
+    <legend>Sorte de fond</legend>
+    <label class="choix"><input type="radio" name="b-mode" value="couleur" checked><span>Couleur</span></label>
+    <label class="choix"><input type="radio" name="b-mode" value="degrade"><span>Dégradé</span></label>
+    <label class="choix"><input type="radio" name="b-mode" value="photo"><span>Photo</span></label>
+  </fieldset>
+  <div id="b-zone-couleur" class="reglage-couleur">
+    <label class="champ-couleur"><span>Couleur</span><input type="color" id="b-couleur"></label>
+    <div class="nuancier" data-cible="b-couleur"></div>
+  </div>
+  <div id="b-zone-couleur2" class="reglage-couleur" hidden>
+    <label class="champ-couleur"><span>2e couleur</span><input type="color" id="b-couleur2"></label>
+    <div class="nuancier" data-cible="b-couleur2"></div>
+  </div>
+  <fieldset id="b-zone-direction" class="choix-groupe deux" hidden>
+    <legend>Direction</legend>
+    <label class="choix"><input type="radio" name="b-direction" value="vertical" checked><span>De haut en bas</span></label>
+    <label class="choix"><input type="radio" name="b-direction" value="horizontal"><span>De gauche à droite</span></label>
+    <label class="choix"><input type="radio" name="b-direction" value="diagonale"><span>En diagonale</span></label>
+    <label class="choix"><input type="radio" name="b-direction" value="rond"><span>Rond</span></label>
+  </fieldset>
+  <div id="b-zone-photo" class="pile serree" hidden>
+    <button type="button" class="bouton large" data-action="fond-photo"><svg class="icone" aria-hidden="true"><use href="#i-galerie"/></svg>Choisir une photo de ma galerie</button>
+    <p id="b-photo-etat" class="aide"></p>
+  </div>
+  <div class="pile serree">
+    <button type="button" class="bouton large danger" data-action="fond-retirer"><svg class="icone" aria-hidden="true"><use href="#i-poubelle"/></svg>Retirer le fond</button>
+  </div>
+</dialog>
+
 <!-- Export -->
 <dialog id="fenetre-export" class="fenetre" aria-labelledby="titre-export">
   <h2 id="titre-export">Exporter l'image</h2>
@@ -431,10 +525,18 @@
 <input type="file" id="fichier-photo" accept="image/*" hidden>
 <input type="file" id="fichier-camera" accept="image/*" capture="environment" hidden>
 <input type="file" id="fichier-calque" accept="image/*" hidden>
+<input type="file" id="fichier-fond" accept="image/*" hidden>
 
 <!-- « Patiente… » pendant les longs calculs -->
-<div id="patience" class="patience" popover="manual" hidden role="status" aria-live="polite">
-  <p id="patience-texte">Un instant…</p>
+<div id="patience" class="patience" popover="manual" hidden>
+  <div class="patience-boite">
+    <p id="patience-texte" role="status" aria-live="polite">Un instant…</p>
+    <div id="patience-progression" class="progression" role="progressbar" aria-label="Avancement" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+      <div class="progression-piste"><div id="patience-barre" class="progression-barre"></div></div>
+      <p id="patience-pourcent" class="mono">0 %</p>
+    </div>
+    <button type="button" id="patience-arreter" class="bouton large discret" data-action="ia-arreter" hidden><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Arrêter</button>
+  </div>
 </div>
 
 <!-- Le message en bas de l'écran -->

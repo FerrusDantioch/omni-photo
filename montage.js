@@ -19,7 +19,9 @@
      miroirH, miroirV : retourné de gauche à droite / de haut en bas
      opacite       : de 0 (invisible) à 1 (opaque)
      visible, verrouille
-   + pour une image : ressource (numéro de l'image), largeur, hauteur
+   + pour une image : ressource (numéro de l'image), largeur, hauteur,
+                      source (l'image d'origine, après un détourage)
+   + pour un fond   : voir fond.js
    + pour un texte  : texte, police, taille, couleur, gras, alignement,
                       contour { actif, couleur, epaisseur },
                       ombre { actif, couleur, flou, distance }
@@ -169,7 +171,12 @@ const Montage = {
   /* Tous les numéros d'images utilisés par le montage. */
   ressourcesUtilisees() {
     const ids = new Set();
-    if (this.doc) for (const c of this.doc.calques) if (c.ressource) ids.add(c.ressource);
+    if (this.doc) {
+      for (const c of this.doc.calques) {
+        if (c.ressource) ids.add(c.ressource);
+        if (c.source) ids.add(c.source);   // l'image d'origine d'un sujet détouré
+      }
+    }
     return ids;
   },
 
@@ -278,7 +285,7 @@ const Historique = {
      sont libérées de la mémoire. */
   nettoyer() {
     const ids = Montage.ressourcesUtilisees();
-    const motif = /"ressource":"([^"]+)"/g;
+    const motif = /"(?:ressource|source)":"([^"]+)"/g;
     for (const etat of [...this.passe, ...this.futur, this._avant || '']) {
       for (const m of etat.matchAll(motif)) ids.add(m[1]);
     }

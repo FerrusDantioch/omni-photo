@@ -138,9 +138,22 @@ function desarmerBouton(bouton) {
    Un voile calme avec une phrase, pendant l'ouverture d'une grande photo
    ou la fabrication du fichier final. */
 const Patience = {
-  montrer(texte) {
+  /* options.progression : montrer une barre de progression ;
+     options.arreter : montrer le bouton « Arrêter » (détourage par IA). */
+  montrer(texte, options = {}) {
     $('#patience-texte').textContent = texte;
+    $('#patience-progression').hidden = !options.progression;
+    $('#patience-arreter').hidden = !options.arreter;
+    this.avancer(0);
     montrerParDessus($('#patience'));
+  },
+  /* fraction : de 0 à 1. */
+  avancer(fraction, texte) {
+    const pourcent = Math.round(limiter(fraction, 0, 1) * 100);
+    $('#patience-barre').style.width = pourcent + '%';
+    $('#patience-pourcent').textContent = pourcent + ' %';
+    $('#patience-progression').setAttribute('aria-valuenow', String(pourcent));
+    if (texte) $('#patience-texte').textContent = texte;
   },
   cacher() {
     cacherParDessus($('#patience'));

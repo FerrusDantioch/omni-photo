@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<!--
+  Omni-Photo — © 2026 Ferrus Dantioch
+  Licence : Creative Commons BY-NC-ND 4.0 (texte complet dans le fichier LICENSE)
+  https://creativecommons.org/licenses/by-nc-nd/4.0/
+-->
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Omni-Photo</title>
+<meta name="description" content="Omni-Photo — le montage photo tout simple, sur téléphone et tablette. Gratuit, sans publicité, fonctionne hors ligne.">
+<meta name="theme-color" content="#14111d">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" href="./logo.svg" type="image/svg+xml">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+
+<link rel="stylesheet" href="./styles.css">
+
+<!-- Le code est découpé en plusieurs fichiers, chargés dans cet ordre.
+     « defer » : ils s'exécutent une fois la page entièrement lue. -->
+<script defer src="./outils.js"></script>
+<script defer src="./polices.js"></script>
+<script defer src="./ressources.js"></script>
+<script defer src="./montage.js"></script>
+<script defer src="./rendu.js"></script>
+<script defer src="./editeur.js"></script>
+<script defer src="./panneaux.js"></script>
+<script defer src="./export.js"></script>
+<script defer src="./sauvegarde.js"></script>
+<script defer src="./app.js"></script>
+</head>
+<body>
+
+<!-- Petites icônes dessinées une seule fois, réutilisées partout avec <use>.
+     Elles sont toujours accompagnées d'un texte. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-galerie" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></g></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></g></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></g></symbol>
+    <symbol id="i-toile" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M12 8v8M8 12h8"/></g></symbol>
+    <symbol id="i-reprendre" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/></g></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></g></symbol>
+    <symbol id="i-maison" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></g></symbol>
+    <symbol id="i-annuler" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></g></symbol>
+    <symbol id="i-retablir" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></g></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M4 19h16"/></g></symbol>
+    <symbol id="i-partager" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></g></symbol>
+    <symbol id="i-texte" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6V4h14v2"/><path d="M12 4v16M9 20h6"/></g></symbol>
+    <symbol id="i-calques" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12.5l9 5 9-5" stroke-linecap="round"/><path d="M3 16.5l9 5 9-5" stroke-linecap="round" opacity=".6"/></g></symbol>
+    <symbol id="i-voir-tout" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></g></symbol>
+    <symbol id="i-valider" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-croix" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-miroir-h" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18" stroke-dasharray="2 3"/><path d="M9 7L3 17h6z"/><path d="M15 7l6 10h-6z" fill="currentColor" fill-opacity=".35"/></g></symbol>
+    <symbol id="i-miroir-v" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18" stroke-dasharray="2 3"/><path d="M7 9L17 3v6z"/><path d="M7 15l10 6v-6z" fill="currentColor" fill-opacity=".35"/></g></symbol>
+    <symbol id="i-avant" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="9" width="11" height="11" rx="1.5" opacity=".5"/><rect x="9" y="4" width="11" height="11" rx="1.5" fill="currentColor" fill-opacity=".35"/></g></symbol>
+    <symbol id="i-arriere" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="9" y="4" width="11" height="11" rx="1.5" opacity=".5"/><rect x="3" y="9" width="11" height="11" rx="1.5" fill="currentColor" fill-opacity=".35"/></g></symbol>
+    <symbol id="i-dupliquer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></g></symbol>
+    <symbol id="i-poubelle" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></g></symbol>
+    <symbol id="i-haut" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-bas" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-oeil" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></g></symbol>
+    <symbol id="i-oeil-ferme" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" opacity=".5"/><path d="M4 4l16 16"/></g></symbol>
+    <symbol id="i-cadenas" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></g></symbol>
+    <symbol id="i-cadenas-ouvert" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.7-1.5"/></g></symbol>
+    <symbol id="i-installer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 7v7M9 11l3 3 3-3"/></g></symbol>
+  </defs>
+</svg>
+
+<p id="chargement" class="chargement">Ouverture d'Omni-Photo…</p>
+
+<div id="application" hidden>
+<main>
+
+<!-- ============================ ACCUEIL ============================ -->
+<section class="vue vue-etroite" data-vue="accueil" aria-labelledby="titre-accueil">
+  <header class="entete-accueil">
+    <img src="./logo.svg" alt="" width="72" height="72">
+    <div>
+      <h1 id="titre-accueil" class="marque" tabindex="-1">Omni<span>-Photo</span></h1>
+      <p class="aide">Le montage photo tout simple. Tes photos restent sur ton téléphone.</p>
+    </div>
+  </header>
+
+  <!-- Bandeaux qui n'apparaissent que si besoin -->
+  <div id="bandeau-mise-a-jour" class="bandeau" hidden>
+    <p><strong>Une nouvelle version d'Omni-Photo est prête.</strong> Ton montage est gardé.</p>
+    <div class="rangee">
+      <button type="button" class="bouton principal" data-action="mettre-a-jour"><svg class="icone" aria-hidden="true"><use href="#i-reprendre"/></svg>Mettre à jour</button>
+      <button type="button" class="bouton" data-action="plus-tard">Plus tard</button>
+    </div>
+  </div>
+  <div id="bandeau-installer" class="bandeau" hidden>
+    <p>Installe Omni-Photo sur ton téléphone : elle s'ouvrira comme une vraie application, même sans internet.</p>
+    <button type="button" class="bouton principal large" data-action="installer"><svg class="icone" aria-hidden="true"><use href="#i-installer"/></svg>Installer Omni-Photo</button>
+  </div>
+
+  <div class="pile">
+    <div id="bloc-reprise" class="bloc" hidden>
+      <p class="etiquette">Montage en cours</p>
+      <p id="date-reprise" class="aide"></p>
+      <button type="button" class="bouton principal large" data-action="reprendre">
+        <svg class="icone" aria-hidden="true"><use href="#i-reprendre"/></svg>Reprendre mon montage
+      </button>
+    </div>
+
+    <div class="bloc">
+      <p class="etiquette">Nouveau montage</p>
+      <button type="button" class="bouton large" data-action="ouvrir-galerie">
+        <svg class="icone" aria-hidden="true"><use href="#i-galerie"/></svg>Ouvrir une photo de ma galerie
+      </button>
+      <button type="button" class="bouton large" data-action="ouvrir-camera">
+        <svg class="icone" aria-hidden="true"><use href="#i-camera"/></svg>Prendre une photo
+      </button>
+      <button type="button" class="bouton large" data-action="ouvrir-toile">
+        <svg class="icone" aria-hidden="true"><use href="#i-toile"/></svg>Commencer sur une toile vide
+      </button>
+    </div>
+
+    <button type="button" class="bouton large discret" data-action="voir-apropos">
+      <svg class="icone" aria-hidden="true"><use href="#i-info"/></svg>À propos
+    </button>
+  </div>
+</section>
+
+<!-- ============================ ÉDITEUR ============================ -->
+<section class="vue vue-editeur" data-vue="editeur" aria-label="Éditeur de montage" hidden>
+  <h1 class="invisible">Éditeur</h1>
+  <header class="barre-editeur">
+    <button type="button" class="bouton outil" data-action="accueil"><svg class="icone" aria-hidden="true"><use href="#i-maison"/></svg>Accueil</button>
+    <button type="button" class="bouton outil" data-action="annuler" disabled><svg class="icone" aria-hidden="true"><use href="#i-annuler"/></svg>Annuler</button>
+    <button type="button" class="bouton outil" data-action="retablir" disabled><svg class="icone" aria-hidden="true"><use href="#i-retablir"/></svg>Rétablir</button>
+    <button type="button" class="bouton outil principal" data-action="ouvrir-export"><svg class="icone" aria-hidden="true"><use href="#i-export"/></svg>Exporter</button>
+  </header>
+
+  <div class="zone-toile">
+    <canvas id="toile" aria-label="Ton montage. Touche un texte ou une image pour le choisir."></canvas>
+  </div>
+
+  <div class="panneau" id="panneau">
+    <!-- Rien n'est choisi : les outils pour ajouter -->
+    <div id="outils-generaux">
+      <div class="grille-outils">
+        <button type="button" class="bouton outil" data-action="ajouter-texte"><svg class="icone" aria-hidden="true"><use href="#i-texte"/></svg>Texte</button>
+        <button type="button" class="bouton outil" data-action="ajouter-image"><svg class="icone" aria-hidden="true"><use href="#i-image"/></svg>Image</button>
+        <button type="button" class="bouton outil" data-action="ouvrir-calques"><svg class="icone" aria-hidden="true"><use href="#i-calques"/></svg>Calques</button>
+        <button type="button" class="bouton outil" data-action="voir-tout"><svg class="icone" aria-hidden="true"><use href="#i-voir-tout"/></svg>Voir tout</button>
+      </div>
+      <p class="aide astuce">Touche un texte ou une image pour le choisir, puis fais-le glisser.
+        Deux doigts : agrandir et tourner. Sans rien choisir, deux doigts zooment dans la photo.</p>
+    </div>
+
+    <!-- Un calque est choisi : ses réglages -->
+    <div id="outils-calque" hidden>
+      <div class="tete-calque">
+        <p id="nom-calque" class="nom-choisi"></p>
+        <button type="button" class="bouton petit" data-action="deselectionner"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Terminé</button>
+      </div>
+
+      <div id="calque-verrouille" class="bandeau" hidden>
+        <p>Ce calque est verrouillé : il ne bouge pas quand on touche la photo.</p>
+        <button type="button" class="bouton large" data-action="deverrouiller"><svg class="icone" aria-hidden="true"><use href="#i-cadenas-ouvert"/></svg>Déverrouiller</button>
+      </div>
+
+      <div id="reglages-calque">
+        <button type="button" class="bouton large principal" id="btn-modifier-texte" data-action="modifier-texte"><svg class="icone" aria-hidden="true"><use href="#i-texte"/></svg>Modifier le texte</button>
+        <label class="curseur"><span>Taille</span><input type="range" id="r-taille" min="1" max="300" step="1" data-unite=" %"><output></output></label>
+        <label class="curseur"><span>Rotation</span><input type="range" id="r-rotation" min="-180" max="180" step="1" data-unite="°"><output></output></label>
+        <label class="curseur"><span>Opacité</span><input type="range" id="r-opacite" min="0" max="100" step="1" data-unite=" %"><output></output></label>
+        <div class="grille-outils trois">
+          <button type="button" class="bouton outil" data-action="miroir-h"><svg class="icone" aria-hidden="true"><use href="#i-miroir-h"/></svg>Retourner ↔</button>
+          <button type="button" class="bouton outil" data-action="miroir-v"><svg class="icone" aria-hidden="true"><use href="#i-miroir-v"/></svg>Retourner ↕</button>
+          <button type="button" class="bouton outil" data-action="dupliquer"><svg class="icone" aria-hidden="true"><use href="#i-dupliquer"/></svg>Dupliquer</button>
+          <button type="button" class="bouton outil" data-action="avancer"><svg class="icone" aria-hidden="true"><use href="#i-avant"/></svg>Avancer</button>
+          <button type="button" class="bouton outil" data-action="reculer"><svg class="icone" aria-hidden="true"><use href="#i-arriere"/></svg>Reculer</button>
+          <button type="button" class="bouton outil danger" data-action="supprimer"><svg class="icone" aria-hidden="true"><use href="#i-poubelle"/></svg>Supprimer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ À PROPOS ============================ -->
+<section class="vue vue-etroite" data-vue="apropos" aria-labelledby="titre-apropos" hidden>
+  <header class="barre">
+    <button type="button" class="bouton retour" data-action="retour">← Retour</button>
+    <h1 id="titre-apropos" tabindex="-1">À propos</h1>
+  </header>
+
+  <div class="pile">
+    <div class="bloc">
+      <div class="apropos-entete">
+        <img src="./logo.svg" alt="" width="84" height="84">
+        <div>
+          <p class="marque marque-petite">Omni<span>-Photo</span></p>
+          <p class="mono" id="numero-version">Version</p>
+        </div>
+      </div>
+      <p>Un outil de montage photo tout simple, pour ton téléphone et ta tablette : ajouter des textes
+         et des images, les déplacer, les agrandir, les tourner, puis enregistrer le résultat en PNG ou en JPG.</p>
+      <p><strong>Application gratuite et sans publicité.</strong> Pas de compte, pas de pistage.
+         Omni-Photo fonctionne sans connexion : tes photos restent sur ton appareil, rien n'est envoyé sur internet.</p>
+    </div>
+
+    <!-- Mention de l'auteur : uniquement le pseudonyme, jamais le vrai nom. -->
+    <div class="bloc">
+      <p class="etiquette">Auteur</p>
+      <p>Application créée par <strong>Ferrus Dantioch</strong>.</p>
+      <p><a href="https://ferrusdantioch.github.io/omni-systeme/" target="_blank" rel="noopener noreferrer">Découvrir l'Omni-système : le portfolio ↗</a></p>
+    </div>
+
+    <!-- Retours : le lien ouvre seulement l'application de messagerie. Rien ne part tout seul. -->
+    <div class="bloc">
+      <p class="etiquette">Retours</p>
+      <p>Une idée, une gêne, quelque chose qui manque ? Tes retours sont les bienvenus, même en quelques mots. Écris à :
+         <span class="adresse-mail">omni-systeme.choking513@passmail.net</span></p>
+      <a class="bouton large" href="mailto:omni-systeme.choking513@passmail.net?subject=Retour%20sur%20Omni-Photo">Envoyer un retour par e-mail</a>
+    </div>
+
+    <div class="bloc">
+      <p class="etiquette">Licence</p>
+      <p>Distribuée sous licence
+         <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/deed.fr" target="_blank" rel="noopener noreferrer">Creative Commons BY-NC-ND 4.0</a>
+         (Attribution - Utilisation non commerciale - Pas d'Œuvre dérivée).</p>
+      <p>Les images que tu fabriques avec Omni-Photo t'appartiennent : la licence concerne seulement le code de l'application.
+         Le logiciel est fourni « en l'état », sans aucune garantie.</p>
+      <p class="mono">© 2026 Ferrus Dantioch</p>
+    </div>
+
+    <!-- Licences tierces : la liste complète est dans LICENCES-TIERS.md -->
+    <div class="bloc">
+      <p class="etiquette">Licences tierces</p>
+      <p>Omni-Photo inclut des polices créées par d'autres, toutes sous
+         <strong>licence Apache 2.0</strong> (texte complet dans le fichier LICENCE-APACHE-2.0.txt) :</p>
+      <ul class="liste-licences">
+        <li><strong>Roboto Slab</strong> — The Roboto Slab Project Authors</li>
+        <li><strong>Special Elite</strong> (« Machine à écrire ») — Astigmatic</li>
+        <li><strong>Permanent Marker</strong> (« Feutre ») — Font Diner</li>
+        <li><strong>Luckiest Guy</strong> (« Affiche ») — Astigmatic</li>
+        <li><strong>Coming Soon</strong> (« Écriture ») — Open Window</li>
+        <li><strong>Satisfy</strong> (« Élégante ») — Font Diner</li>
+      </ul>
+      <p class="aide">Aucune bibliothèque de code extérieure n'est utilisée pour l'instant.
+         Les fichiers sont inclus sans modification.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<!-- ============================ FENÊTRES ============================ -->
+
+<!-- Toile vide : choix du format -->
+<dialog id="fenetre-toile" class="fenetre" aria-labelledby="titre-toile">
+  <h2 id="titre-toile">Toile vide</h2>
+  <fieldset class="choix-groupe">
+    <legend>Format</legend>
+    <label class="choix"><input type="radio" name="f-format" value="1080x1080" checked><span>Carré<small>1 080 × 1 080</small></span></label>
+    <label class="choix"><input type="radio" name="f-format" value="1080x1350"><span>Portrait<small>1 080 × 1 350</small></span></label>
+    <label class="choix"><input type="radio" name="f-format" value="1080x1920"><span>Story<small>1 080 × 1 920</small></span></label>
+    <label class="choix"><input type="radio" name="f-format" value="1920x1080"><span>Paysage<small>1 920 × 1 080</small></span></label>
+  </fieldset>
+  <fieldset class="choix-groupe deux">
+    <legend>Fond</legend>
+    <label class="choix"><input type="radio" name="f-fond" value="transparent" checked><span>Transparent</span></label>
+    <label class="choix"><input type="radio" name="f-fond" value="blanc"><span>Blanc</span></label>
+  </fieldset>
+  <div class="rangee fin">
+    <button type="button" class="bouton" data-action="fermer-fenetre"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Fermer</button>
+    <button type="button" class="bouton principal" data-action="creer-toile"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Créer</button>
+  </div>
+</dialog>
+
+<!-- Liste des calques -->
+<dialog id="fenetre-calques" class="fenetre feuille" aria-labelledby="titre-calques">
+  <div class="tete-fenetre">
+    <h2 id="titre-calques">Calques</h2>
+    <button type="button" class="bouton petit" data-action="fermer-fenetre"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Terminé</button>
+  </div>
+  <p class="aide">Le calque du haut est au-dessus de tous les autres. Un calque verrouillé ne bouge pas quand on touche la photo.</p>
+  <ul id="liste-calques" class="liste-calques"></ul>
+</dialog>
+
+<!-- Écrire et régler un texte. La photo reste visible au-dessus. -->
+<dialog id="fenetre-texte" class="fenetre feuille" aria-labelledby="titre-texte">
+  <div class="tete-fenetre">
+    <h2 id="titre-texte" tabindex="-1">Texte</h2>
+    <button type="button" class="bouton petit principal" data-action="fermer-fenetre"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Terminé</button>
+  </div>
+  <label class="champ"><span>Ton texte (plusieurs lignes possibles)</span>
+    <textarea id="t-texte" rows="2" autocomplete="off" spellcheck="true"></textarea>
+  </label>
+
+  <fieldset class="choix-groupe">
+    <legend>Police</legend>
+    <div id="t-polices" class="grille-polices"></div>
+  </fieldset>
+
+  <label class="curseur"><span>Taille</span><input type="range" id="t-taille" min="1" max="40" step="0.5" data-unite=" %"><output></output></label>
+
+  <div class="reglage-couleur">
+    <label class="champ-couleur"><span>Couleur</span><input type="color" id="t-couleur"></label>
+    <div class="nuancier" data-cible="t-couleur"></div>
+  </div>
+
+  <div class="rangee">
+    <label class="interrupteur"><input type="checkbox" id="t-gras"><span>Gras</span></label>
+  </div>
+
+  <fieldset class="choix-groupe trois">
+    <legend>Alignement</legend>
+    <label class="choix"><input type="radio" name="t-align" value="gauche"><span>À gauche</span></label>
+    <label class="choix"><input type="radio" name="t-align" value="centre"><span>Centré</span></label>
+    <label class="choix"><input type="radio" name="t-align" value="droite"><span>À droite</span></label>
+  </fieldset>
+
+  <div class="sous-bloc" id="zone-contour">
+    <label class="interrupteur"><input type="checkbox" id="t-contour"><span>Contour</span></label>
+    <div class="reglages-secondaires">
+      <div class="reglage-couleur">
+        <label class="champ-couleur"><span>Couleur</span><input type="color" id="t-contour-couleur"></label>
+        <div class="nuancier" data-cible="t-contour-couleur"></div>
+      </div>
+      <label class="curseur"><span>Épaisseur</span><input type="range" id="t-contour-epaisseur" min="1" max="30" step="1"><output></output></label>
+    </div>
+  </div>
+
+  <div class="sous-bloc" id="zone-ombre">
+    <label class="interrupteur"><input type="checkbox" id="t-ombre"><span>Ombre</span></label>
+    <div class="reglages-secondaires">
+      <div class="reglage-couleur">
+        <label class="champ-couleur"><span>Couleur</span><input type="color" id="t-ombre-couleur"></label>
+        <div class="nuancier" data-cible="t-ombre-couleur"></div>
+      </div>
+      <label class="curseur"><span>Flou</span><input type="range" id="t-ombre-flou" min="0" max="50" step="1"><output></output></label>
+      <label class="curseur"><span>Distance</span><input type="range" id="t-ombre-distance" min="0" max="30" step="1"><output></output></label>
+    </div>
+  </div>
+</dialog>
+
+<!-- Export -->
+<dialog id="fenetre-export" class="fenetre" aria-labelledby="titre-export">
+  <h2 id="titre-export">Exporter l'image</h2>
+  <p class="mono" id="e-dimensions"></p>
+  <fieldset class="choix-groupe deux">
+    <legend>Format</legend>
+    <label class="choix"><input type="radio" name="e-format" value="png" checked><span>PNG<small>transparence gardée</small></span></label>
+    <label class="choix"><input type="radio" name="e-format" value="jpg"><span>JPG<small>plus léger</small></span></label>
+  </fieldset>
+  <p class="aide" id="e-explication"></p>
+  <div id="zone-qualite" hidden>
+    <label class="curseur"><span>Qualité</span><input type="range" id="e-qualite" min="50" max="100" step="1" value="90"><output></output></label>
+    <p class="aide">90 % : très belle image, fichier léger. 100 % : la meilleure qualité, fichier plus lourd.</p>
+  </div>
+  <div class="pile serree">
+    <button type="button" class="bouton principal large" data-action="enregistrer"><svg class="icone" aria-hidden="true"><use href="#i-export"/></svg>Enregistrer dans le téléphone</button>
+    <button type="button" class="bouton large" data-action="partager"><svg class="icone" aria-hidden="true"><use href="#i-partager"/></svg>Partager…</button>
+    <button type="button" class="bouton large discret" data-action="fermer-fenetre"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Fermer</button>
+  </div>
+</dialog>
+
+<!-- Sélecteurs de fichiers, cachés : on les ouvre avec les boutons -->
+<input type="file" id="fichier-photo" accept="image/*" hidden>
+<input type="file" id="fichier-camera" accept="image/*" capture="environment" hidden>
+<input type="file" id="fichier-calque" accept="image/*" hidden>
+
+<!-- « Patiente… » pendant les longs calculs -->
+<div id="patience" class="patience" popover="manual" hidden role="status" aria-live="polite">
+  <p id="patience-texte">Un instant…</p>
+</div>
+
+<!-- Le message en bas de l'écran -->
+<div id="message" class="message" popover="manual" hidden role="status" aria-live="polite">
+  <p id="message-texte"></p>
+  <button type="button" class="bouton petit" data-action="fermer-message">D'accord</button>
+</div>
+
+</body>
+</html>

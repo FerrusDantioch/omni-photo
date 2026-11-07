@@ -10,7 +10,7 @@
 
 /* ⚠️ Numéro de version, affiché dans « À propos ». À changer à chaque
    version publiée, EN MÊME TEMPS que CACHE en haut de sw.js. */
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 
 
 /* ---------- 1. Les écrans ---------- */
@@ -23,6 +23,7 @@ function afficherVue(nom) {
   document.body.dataset.vue = nom;
   if (nom === 'accueil') Accueil.majListe();
   if (nom === 'apropos') APropos.maj();
+  if (nom === 'verifier') Diagnostic.afficher();
   if (nom === 'editeur') {
     Editeur.redimensionner();
     Editeur.ajusterVue();
@@ -52,7 +53,7 @@ function allerVers(nom) {
 
 window.addEventListener('popstate', () => {
   const nom = location.hash.slice(1);
-  if (nom === 'apropos') afficherVue('apropos');
+  if (nom === 'apropos' || nom === 'verifier') afficherVue(nom);
   else if (nom === 'editeur' && Montage.doc) afficherVue('editeur');
   else {
     // Retour du téléphone pendant une retouche : elle est abandonnée
@@ -99,6 +100,24 @@ const ACTIONS = {
   'ouvrir-camera': () => choisirFichier('#fichier-camera'),
   'ouvrir-toile': () => $('#fenetre-toile').showModal(),
   'importer-montage': () => choisirFichier('#fichier-montage'),
+  'sauver-tout': () => Accueil.enregistrerTout(),
+  'ouvrir-collage': () => choisirFichier('#fichier-collage'),
+  'creer-collage': () => Collage.creer(),
+  'voir-verifier': () => allerVers('verifier'),
+  'verif-vitesse': () => Diagnostic.testerVitesse(),
+  'ajouter-signature': () => Signature.ajouter(),
+  'enregistrer-signature': () => Signature.enregistrer(Montage.calqueChoisi()),
+  'lumiere-auto': () => OutilLumiere.auto(),
+  'outil-correcteur': () => Retouche.ouvrir(OutilCorrecteur),
+  'correcteur-comparer': () => OutilCorrecteur.basculerComparaison(),
+  'correcteur-retirer': () => OutilCorrecteur.retirerDernier(),
+  'correcteur-valider': () => OutilCorrecteur.valider(),
+  'correcteur-source': () => OutilCorrecteur.choisirAutreSource(),
+  'ouvrir-modeles': () => Modeles.ouvrir(),
+  'modele-choisir': (b) => Modeles.choisir(b.dataset.id),
+  'modele-photo': () => choisirFichier('#fichier-modele'),
+  'modele-sans-photo': () => Modeles.creer(null),
+  'modele-retour': () => { $('#modele-etape-photo').hidden = true; $('#liste-modeles').hidden = false; },
   'montage-ouvrir': (b) => Accueil.ouvrirMontage(b.dataset.id),
   'montage-renommer': (b) => Accueil.renommer(b.dataset.id),
   'valider-nom': () => Accueil.validerNom(),
@@ -338,6 +357,52 @@ const Installation = {
 };
 
 
+/* Le fonctionnement sans Internet est-il prêt ? (écran « Vérifier mon
+   téléphone ») Réponses : 'pret', 'premiere-visite', 'incomplet' ou
+   'impossible'. Le service worker vérifie sa réserve et répond. */
+async function etatHorsLigne() {
+  if (!('serviceWorker' in navigator) || !window.isSecureContext) return 'impossible';
+  const gardien = navigator.serviceWorker.controller;
+  if (!gardien) return 'premiere-visite';
+  try {
+    const reponse = await avecDelai(new Promise((reussir) => {
+      const canal = new MessageChannel();
+      canal.port1.onmessage = (e) => reussir(e.data);
+      gardien.postMessage({ type: 'verifier' }, [canal.port2]);
+    }), 15000);
+    return reponse && reponse.complet ? 'pret' : 'incomplet';
+  } catch (e) {
+    return 'incomplet';
+  }
+}
+
+/* Version 1.2 : des photos partagées depuis la galerie (menu « Partager »
+   d'Android → Omni-Photo). Le service worker les a rangées dans la
+   réserve « omni-photo-partage » ; on les ouvre (une photo = un montage,
+   plusieurs = un collage), puis on vide la réserve. */
+const Partage = {
+  async recevoir() {
+    let fichiers = [];
+    try {
+      const c = await caches.open('omni-photo-partage');
+      for (const req of await c.keys()) {
+        const rep = await c.match(req);
+        const nom = decodeURIComponent(rep.headers.get('X-Nom') || 'photo');
+        fichiers.push(new File([await rep.blob()], nom, { type: rep.headers.get('Content-Type') || 'image/jpeg' }));
+        await c.delete(req);
+      }
+    } catch (e) {
+      console.warn(e);
+    }
+    if (!fichiers.length) {
+      Message.erreur('Les photos partagées n\'ont pas pu être reçues. Ouvre-les plutôt avec « Ouvrir une photo de ma galerie ».');
+      return;
+    }
+    if (fichiers.length === 1) Accueil.ouvrirPhoto(fichiers[0]);
+    else Collage.depuisFichiers(fichiers);
+  }
+};
+
 /* La page « À propos » : les fichiers de l'IA déjà dans le téléphone. */
 const APropos = {
   async maj() {
@@ -369,6 +434,13 @@ async function demarrer() {
   $('#fichier-camera').addEventListener('change', (e) => Accueil.ouvrirPhoto(e.target.files[0]));
   $('#fichier-calque').addEventListener('change', (e) => ajouterImageCalque(e.target.files[0]));
   $('#fichier-montage').addEventListener('change', (e) => Accueil.importerFichier(e.target.files[0]));
+  $('#fichier-collage').addEventListener('change', (e) => Collage.depuisFichiers(e.target.files));
+  $('#fenetre-collage').addEventListener('input', () => Collage.apercu());
+  $('#fenetre-collage').addEventListener('change', () => Collage.apercu());
+  $('#fenetre-collage').addEventListener('close', () => Collage.annuler());
+  $('#fichier-modele').addEventListener('change', (e) => { if (e.target.files[0]) Modeles.creer(e.target.files[0]); });
+  $('#cr-taille').addEventListener('input', () => OutilCorrecteur.montrerReglage());
+  $('#outil-correcteur').addEventListener('change', () => { if (Editeur.outil === OutilCorrecteur) OutilCorrecteur._maj(); });
   $('#fenetre-nom').addEventListener('submit', (e) => { e.preventDefault(); Accueil.validerNom(); });
 
   // Nouveaux outils de la version 1.1
@@ -420,9 +492,13 @@ async function demarrer() {
 
   // L'écran demandé par l'adresse (l'éditeur, lui, demande un montage)
   const demande = location.hash.slice(1);
-  if (demande !== 'apropos') history.replaceState(null, '', location.pathname + location.search);
-  afficherVue(demande === 'apropos' ? 'apropos' : 'accueil');
+  const ecranDirect = demande === 'apropos' || demande === 'verifier';
+  if (!ecranDirect) history.replaceState(null, '', location.pathname + location.search);
+  afficherVue(ecranDirect ? demande : 'accueil');
   document.body.dataset.pret = 'oui';
+
+  // Des photos arrivent du menu « Partager » d'Android (voir sw.js)
+  if (demande === 'partage') Partage.recevoir();
 }
 
 demarrer().catch((erreur) => {

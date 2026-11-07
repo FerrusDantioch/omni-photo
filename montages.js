@@ -194,18 +194,29 @@ const Accueil = {
       const blob = await Sauvegarde.versFichier(id);
       const carte = $(`.ouvrir-montage[data-id="${id}"] strong`);
       const nom = nomDeFichierMontage(carte ? carte.textContent : 'montage');
-      const url = URL.createObjectURL(blob);
-      const lien = document.createElement('a');
-      lien.href = url;
-      lien.download = nom;
-      document.body.append(lien);
-      lien.click();
-      lien.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      telechargerFichier(blob, nom);
       Message.montrer(`Fichier enregistré : ${nom}, dans « Téléchargements ». Ouvre-le sur la tablette avec « Ouvrir un fichier .omniphoto ».`);
     } catch (e) {
       console.warn(e);
       Message.erreur('Le fichier n\'a pas pu être fabriqué. Ton téléphone manque peut-être de mémoire ; réessaie.');
+    } finally {
+      Patience.cacher();
+    }
+  },
+
+  /* Tous les montages dans un seul fichier. */
+  async enregistrerTout() {
+    Patience.montrer('Préparation du fichier…');
+    await laisserAfficher();
+    try {
+      const blob = await Sauvegarde.versFichierTout();
+      const d = new Date();
+      const nom = `omni-photo-tous-mes-montages-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.omniphoto`;
+      telechargerFichier(blob, nom);
+      Message.montrer(`Sauvegarde enregistrée : ${nom}, dans « Téléchargements » (${nombre(blob.size / 1048576)} Mo). Garde-la en lieu sûr ; « Ouvrir un fichier .omniphoto » remet tous tes montages.`);
+    } catch (e) {
+      console.warn(e);
+      Message.erreur('La sauvegarde n\'a pas pu être fabriquée. Ton téléphone manque peut-être de mémoire ; réessaie.');
     } finally {
       Patience.cacher();
     }
@@ -216,10 +227,10 @@ const Accueil = {
     Patience.montrer('Ouverture du fichier…');
     await laisserAfficher();
     try {
-      const id = await Sauvegarde.depuisFichier(fichier);
+      const ids = await Sauvegarde.depuisFichier(fichier);
       await this.majListe();
-      Message.montrer('Montage ajouté à « Mes montages » ✓');
-      return id;
+      Message.montrer(ids.length > 1 ? `${ids.length} montages ajoutés à « Mes montages » ✓` : 'Montage ajouté à « Mes montages » ✓');
+      return ids;
     } catch (e) {
       console.warn(e);
       Message.erreur(e.message && /omniphoto|Omni-Photo/i.test(e.message) ? e.message
@@ -229,6 +240,18 @@ const Accueil = {
     }
   }
 };
+
+/* Enregistre un fichier dans le téléphone (dossier « Téléchargements »). */
+function telechargerFichier(blob, nom) {
+  const url = URL.createObjectURL(blob);
+  const lien = document.createElement('a');
+  lien.href = url;
+  lien.download = nom;
+  document.body.append(lien);
+  lien.click();
+  lien.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
 
 /* « Vacances à la mer » → « omni-photo-vacances-a-la-mer.omniphoto »
    (sans accent : certains téléphones remplacent sinon le nom). */

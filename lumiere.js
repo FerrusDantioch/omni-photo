@@ -121,6 +121,47 @@ const OutilLumiere = {
     this.majPanneau();
   },
 
+  /* « Auto » : on regarde les couleurs de la photo (une petite copie) et
+     on corrige ce qui en a besoin : trop sombre ou trop claire, terne,
+     teinte bleutée ou trop rouge. On peut ensuite ajuster à la main. */
+  auto() {
+    const c = Montage.calque(this.calque.id);
+    const r = c && Ressources.obtenir(c.ressource);
+    if (!r) return;
+    const f = Math.min(1, 200 / Math.max(r.largeur, r.hauteur));
+    const l = Math.max(1, Math.round(r.largeur * f)), h = Math.max(1, Math.round(r.hauteur * f));
+    const { toile, ctx } = nouvelleToile(l, h);
+    ctx.drawImage(r.image, 0, 0, l, h);
+    const d = ctx.getImageData(0, 0, l, h).data;
+    toile.width = 0;
+    const histo = new Uint32Array(256);
+    let n = 0, somme = 0, sat = 0, rouge = 0, bleu = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 128) continue;          // les zones transparentes ne comptent pas
+      const R = d[i], G = d[i + 1], B = d[i + 2];
+      const y = Math.round(0.299 * R + 0.587 * G + 0.114 * B);
+      histo[y]++; n++; somme += y;
+      sat += (Math.max(R, G, B) - Math.min(R, G, B)) / 255;
+      rouge += R; bleu += B;
+    }
+    if (!n) return;
+    // Le 2e et le 98e « centile » : où commencent les noirs et les blancs
+    const centile = (p) => { let k = 0; for (let v = 0; v < 256; v++) { k += histo[v]; if (k >= p * n) return v / 255; } return 1; };
+    const moyenne = somme / n / 255, bas = centile(0.02), haut = centile(0.98);
+    const ecart = Math.max(0.05, haut - bas);
+    const teinte = (bleu - rouge) / n / 255;   // > 0 : bleutée ; < 0 : rougeâtre
+    const reglages = {
+      lumiere: Math.round(limiter((0.5 - moyenne) * 160, -60, 60)),
+      contraste: Math.round(ecart < 0.85 ? limiter((0.85 / ecart - 1) * 60, 0, 50) : 0),
+      saturation: Math.round(sat / n < 0.18 ? limiter((0.18 - sat / n) * 200, 0, 35) : 0),
+      chaleur: Math.round(teinte > 0.04 ? limiter(teinte * 300, 0, 40) : (teinte < -0.15 ? -limiter((-teinte - 0.15) * 150, 0, 30) : 0))
+    };
+    for (const [k, v] of Object.entries(reglages)) $('#lu-' + k).value = v;
+    $('input[name="lu-filtre"][value="aucun"]').checked = true;
+    this.appliquer();
+    Message.montrer('Réglage automatique appliqué ✓ Tu peux encore l\'ajuster avec les curseurs.');
+  },
+
   reinitialiser() {
     const c = Montage.calque(this.calque.id);
     if (c) Montage.modifier(c.id, { reglages: undefined });

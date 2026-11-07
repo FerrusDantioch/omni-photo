@@ -232,6 +232,12 @@ const Panneaux = {
     $('#t-ombre-couleur').value = c.ombre.couleur;
     this._valeur('#t-ombre-flou', Math.round(c.ombre.flou * 100));
     this._valeur('#t-ombre-distance', Math.round(c.ombre.distance * 100));
+    this._valeur('#t-courbure', Math.round(c.courbure || 0));
+    this._valeur('#t-espacement', Math.round((c.espacement || 0) * 100));
+    const bandeau = Object.assign({ actif: false, couleur: '#1b1726', opacite: 0.8 }, c.bandeau);
+    $('#t-bandeau').checked = bandeau.actif;
+    $('#t-bandeau-couleur').value = bandeau.couleur;
+    this._valeur('#t-bandeau-opacite', Math.round(bandeau.opacite * 100));
     this._majZonesTexte();
 
     const fenetre = $('#fenetre-texte');
@@ -248,6 +254,9 @@ const Panneaux = {
   _majZonesTexte() {
     $('#zone-contour').classList.toggle('inactif', !$('#t-contour').checked);
     $('#zone-ombre').classList.toggle('inactif', !$('#t-ombre').checked);
+    $('#zone-bandeau').classList.toggle('inactif', !$('#t-bandeau').checked);
+    // En arc, le texte est toujours centré
+    $('input[name="t-align"]').closest('fieldset').classList.toggle('inactif', Number($('#t-courbure').value) !== 0);
   },
 
   _appliquerTexte() {
@@ -269,7 +278,10 @@ const Panneaux = {
       ombre: {
         actif: $('#t-ombre').checked, couleur: $('#t-ombre-couleur').value,
         flou: Number($('#t-ombre-flou').value) / 100, distance: Number($('#t-ombre-distance').value) / 100
-      }
+      },
+      courbure: Number($('#t-courbure').value),
+      espacement: Number($('#t-espacement').value) / 100,
+      bandeau: { actif: $('#t-bandeau').checked, couleur: $('#t-bandeau-couleur').value, opacite: Number($('#t-bandeau-opacite').value) / 100 }
     });
   },
 

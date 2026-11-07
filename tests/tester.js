@@ -1262,8 +1262,16 @@ lancer('Omni-Photo', async () => {
     verifier(await p.evaluate(() => Detourage.modelePrefere()) === 'personne', 'le choix du modèle est retenu');
     await p.click('#outil-ia [data-action="outil-fermer"]');
     await p.click('#outil-ia [data-action="outil-fermer"]').catch(() => {});
-    // À propos : l'état des fichiers de l'IA, et les supprimer
+    // Vérifier mon téléphone : le test de vitesse de l'IA
     await p.click('[data-action="accueil"]');
+    await p.click('[data-action="voir-verifier"]');
+    await p.waitForSelector('#verif-liste li');
+    await p.click('[data-action="verif-vitesse"]');
+    await p.waitForFunction(() => /Détourage d'essai|pas pu/.test(document.querySelector('#verif-vitesse-resultat').textContent), null, { timeout: 120000 });
+    verifier(/Détourage d'essai : \d+,\d s \((rapide|correct|lent)/.test(await texte(p, '#verif-vitesse-resultat')), 'test de vitesse de l’IA', await texte(p, '#verif-vitesse-resultat'));
+    await p.click('[data-action="retour"]');
+    await p.waitForTimeout(300);
+    // À propos : l'état des fichiers de l'IA, et les supprimer
     await p.click('[data-action="voir-apropos"]');
     await p.waitForTimeout(500);
     verifier((await texte(p, '#ia-etat-fichiers')) === 'Tout sujet : dans le téléphone ✓ · Personne : dans le téléphone ✓', 'À propos : les deux modèles sont dans le téléphone', await texte(p, '#ia-etat-fichiers'));
@@ -1271,6 +1279,346 @@ lancer('Omni-Photo', async () => {
     await p.click('[data-action="supprimer-ia"]');
     await p.waitForTimeout(500);
     verifier((await texte(p, '#ia-etat-fichiers')).includes('pas encore téléchargé') && await p.$eval('[data-action="supprimer-ia"]', (b) => b.hidden), 'supprimer les fichiers de l’IA libère la place');
+    await t.ctx.close();
+  });
+
+
+  // ---------------- Version 1.2 ----------------
+  await section('Texte en arc, bandeau et espacement', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await p.click('[data-action="ouvrir-toile"]');
+    await p.click('[data-action="creer-toile"]');
+    await attendre(p, 400);
+    await toucherOutil(p, 'ajouter-texte');
+    verifier((await texte(p, '#fenetre-texte')).includes('émojis'), 'l’astuce des émojis est dans la fenêtre « Texte »');
+    await p.fill('#t-texte', 'Bonjour le monde');
+    const droit = await p.evaluate(() => { const c = Montage.calqueChoisi(); return Rendu.mesurerTexte(c); });
+    const regler = (id, v) => p.evaluate(({ id, v }) => { const el = document.querySelector(id); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }, { id, v });
+    await regler('#t-espacement', 30);
+    const espace = await p.evaluate(() => Rendu.mesurerTexte(Montage.calqueChoisi()));
+    verifier(espace.largeur > droit.largeur * 1.2, 'l’espacement élargit le texte', [droit.largeur, espace.largeur]);
+    await regler('#t-espacement', 0);
+    await regler('#t-courbure', 70);
+    await p.click('label.interrupteur:has(#t-bandeau)');
+    await p.click('label.interrupteur:has(#t-ombre)');      // sans ombre, pour mesurer les lettres
+    await p.click('#fenetre-texte [data-action="fermer-fenetre"]');
+    const c = (await etat(p)).doc.calques[0];
+    verifier(c.courbure === 70 && c.bandeau.actif && c.bandeau.couleur === '#1b1726', 'courbure et bandeau rangés dans le calque', [c.courbure, c.bandeau]);
+    verifier(await p.$eval('input[name="t-align"]', (el) => el.closest('fieldset').classList.contains('inactif')), 'en arc, l’alignement est grisé (toujours centré)');
+    // Où sont les lettres ? En arc vers le haut, les bouts sont plus bas que le milieu
+    const formes = await p.evaluate(() => {
+      const c = JSON.parse(JSON.stringify(Montage.calqueChoisi() || Montage.doc.calques[0]));
+      c.bandeau.actif = false; c.ombre.actif = false; c.couleur = '#ffffff';
+      const m = Rendu.mesurerTexte(c);
+      const l = Math.ceil(m.largeur), h = Math.ceil(m.hauteur);
+      const toile = new OffscreenCanvas(l, h); const ctx = toile.getContext('2d');
+      Rendu.dessinerCalque(ctx, Object.assign(c, { x: l / 2, y: h / 2, echelle: 1, rotation: 0 }), {});
+      const d = ctx.getImageData(0, 0, l, h).data;
+      const hauteurMoyenne = (x0, x1) => { let s = 0, n = 0; for (let y = 0; y < h; y++) for (let x = x0; x < x1; x++) if (d[(y * l + x) * 4 + 3] > 128) { s += y; n++; } return n ? s / n : -1; };
+      return { bouts: (hauteurMoyenne(0, Math.round(l * 0.18)) + hauteurMoyenne(Math.round(l * 0.82), l)) / 2, milieu: hauteurMoyenne(Math.round(l * 0.4), Math.round(l * 0.6)) };
+    });
+    verifier(formes.bouts > formes.milieu + 10, 'texte en arc : le milieu est plus haut que les bouts', formes);
+    // Le bandeau, à l'export
+    const coin = await p.evaluate(() => {
+      const c = Montage.doc.calques[0];
+      const m = Rendu.mesurerTexte(c);
+      return [Math.round(c.x - (m.largeur / 2 - 4) * c.echelle), Math.round(c.y)];   // milieu du bord gauche
+    });
+    const ex = await exporterPixels(p, [coin]);
+    verifier(Math.abs(ex.pixels[0][3] - 204) < 8 && ex.pixels[0][0] < 40, 'le bandeau (sombre, un peu transparent) est derrière le texte', ex.pixels[0]);
+    await t.ctx.close();
+  });
+
+  await section('Signature, bouton Auto, formats YouTube', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'a.jpg', mimeType: 'image/jpeg', buffer: await fabriquerImage(p, 1200, 800) });
+    await attendreFin(p);
+    // Pas encore de signature
+    await toucherOutil(p, 'ajouter-signature');
+    verifier((await texte(p, '#message-texte')).includes('pas encore de signature'), 'sans signature : on explique comment en faire une');
+    // Un texte en bas à droite devient la signature
+    await p.evaluate(() => Historique.action(() => { const c = Montage.ajouterTexte('© Ferrus'); Montage.modifier(c.id, { x: 1000, y: 700, echelle: 0.5 }); }));
+    const avant = await p.evaluate(() => { const c = Montage.calqueChoisi(); return { part: Rendu.tailleCalque(c).largeur * c.echelle / 800 }; });
+    await p.click('[data-action="enregistrer-signature"]');
+    verifier(await p.evaluate(() => !!localStorage.getItem('omniphoto-signature')), 'le texte est enregistré comme signature');
+    // Un autre montage, d'une autre taille : la signature s'y place au même endroit
+    await p.click('[data-action="accueil"]');
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'b.jpg', mimeType: 'image/jpeg', buffer: await fabriquerImage(p, 600, 400) });
+    await attendreFin(p);
+    await toucherOutil(p, 'ajouter-signature');
+    let e = await etat(p);
+    let sig = e.doc.calques[e.doc.calques.length - 1];
+    const part = await p.evaluate((id) => { const c = Montage.calque(id); return Rendu.tailleCalque(c).largeur * c.echelle / 400; }, sig.id);
+    verifier(sig.texte === '© Ferrus' && Math.abs(sig.x - 500) < 1 && Math.abs(sig.y - 350) < 1, 'signature ajoutée au même endroit (en proportion)', [sig.x, sig.y]);
+    verifier(Math.abs(part - avant.part) < 0.01, 'et à la même taille (en proportion)', [avant.part, part]);
+    // Un logo comme signature
+    await p.evaluate(() => Montage.choisir(null));
+    await ongletAjouter(p);
+    await donnerFichier(p, '#outils-generaux [data-action="ajouter-image"]', { name: 'logo.png', mimeType: 'image/png', buffer: await fabriquerImage(p, 200, 200, { type: 'image/png', transparent: true }) });
+    await attendreFin(p);
+    await p.click('[data-action="enregistrer-signature"]');
+    await p.waitForTimeout(500);
+    await p.click('[data-action="accueil"]');
+    await p.click('[data-action="ouvrir-toile"]');
+    await p.click('label.choix:has(input[value="1280x720"])');
+    await p.click('[data-action="creer-toile"]');
+    await attendre(p, 400);
+    e = await etat(p);
+    verifier(e.doc.largeur === 1280 && e.doc.hauteur === 720, 'toile vide « Miniature YouTube » : 1 280 × 720');
+    await toucherOutil(p, 'ajouter-signature');
+    await p.waitForTimeout(500);
+    e = await etat(p);
+    sig = e.doc.calques[e.doc.calques.length - 1];
+    verifier(sig && sig.type === 'image' && await p.evaluate((id) => !!Ressources.obtenir(id), sig.ressource), 'un logo comme signature, ajouté sur un autre montage');
+    await p.evaluate(() => Sauvegarde.maintenant());
+    verifier(await p.evaluate(async () => !!(await Base.lire('images', 'signature'))), 'l’image de la signature n’est pas effacée par le ménage');
+
+    // Le bouton « Auto » sur une photo trop sombre
+    await p.click('[data-action="accueil"]');
+    const sombre = Buffer.from(await p.evaluate(async () => {
+      const c = document.createElement('canvas'); c.width = 400; c.height = 300; const x = c.getContext('2d');
+      x.fillStyle = '#1c1f2b'; x.fillRect(0, 0, 400, 300); x.fillStyle = '#3a4258'; x.fillRect(100, 80, 200, 140);
+      const b = await new Promise((ok) => c.toBlob(ok, 'image/png'));
+      return [...new Uint8Array(await b.arrayBuffer())];
+    }));
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'sombre.png', mimeType: 'image/png', buffer: sombre });
+    await attendreFin(p);
+    await toucherOutil(p, 'outil-lumiere');
+    await p.click('[data-action="lumiere-auto"]');
+    e = await etat(p);
+    const rg = e.doc.calques[0].reglages || {};
+    verifier(rg.lumiere > 20 && rg.contraste > 0, '« Auto » éclaircit et donne du contraste à une photo sombre', rg);
+    verifier(Number(await p.$eval('#lu-lumiere', (el) => el.value)) === rg.lumiere, 'les curseurs montrent le réglage automatique');
+    await p.click('[data-action="lumiere-terminer"]');
+
+    // Export « YouTube » d'une grande image
+    await p.click('[data-action="accueil"]');
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'g.jpg', mimeType: 'image/jpeg', buffer: await fabriquerImage(p, 2400, 1350) });
+    await attendreFin(p);
+    const yt = await exporterPixels(p, [[0, 0]], { taille: '1280' });
+    verifier(yt.taille[0] === 1280 && yt.taille[1] === 720, 'export « YouTube » : 1 280 × 720', yt.taille);
+
+    // Sauvegarder tous les montages en un fichier, puis le rouvrir
+    await p.click('[data-action="accueil"]');
+    await p.waitForTimeout(800);
+    const nb = await p.$$eval('#liste-montages .ouvrir-montage', (l) => l.length);
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.click('[data-action="sauver-tout"]')]);
+    const fichier = fs.readFileSync(await dl.path());
+    verifier(fichier.slice(0, 16).toString() === 'OMNIPHOTO-TOUT-1' && /^omni-photo-tous-mes-montages-\d{4}-\d\d-\d\d\.omniphoto$/.test(dl.suggestedFilename()), 'un seul fichier pour tous les montages', dl.suggestedFilename());
+    await donnerFichier(p, '[data-action="importer-montage"]', { name: 'tout.omniphoto', mimeType: 'application/octet-stream', buffer: fichier });
+    await attendreFin(p);
+    await p.waitForFunction((n) => document.querySelectorAll('#liste-montages .ouvrir-montage').length === n, nb * 2, { timeout: 10000 }).catch(() => {});
+    verifier((await p.$$eval('#liste-montages .ouvrir-montage', (l) => l.length)) === nb * 2 && (await texte(p, '#message-texte')).includes(`${nb} montages ajoutés`), 'le fichier remet tous les montages', [nb, await texte(p, '#message-texte')]);
+    await t.ctx.close();
+  });
+
+  await section('Vérifier mon téléphone', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await p.click('[data-action="voir-verifier"]');
+    await p.waitForFunction(() => document.querySelectorAll('#verif-liste li').length >= 8, null, { timeout: 15000 });
+    const titres = await p.$$eval('#verif-liste li', (l) => l.map((x) => x.dataset.titre));
+    verifier(['Navigateur', 'Sans internet', 'Installation', 'Mémoire', 'Grandes photos', 'Intelligence artificielle', 'Place utilisée', 'Protection des montages'].every((x) => titres.includes(x)), 'les 8 vérifications sont affichées', titres);
+    verifier(await p.$eval('#verif-liste li[data-titre="Grandes photos"]', (li) => li.classList.contains('ok')), 'les photos de 4 096 pixels passent');
+    await p.click('[data-action="verif-vitesse"]');
+    await p.waitForFunction(() => document.querySelector('#verif-vitesse-resultat').textContent.length > 0);
+    verifier((await texte(p, '#verif-vitesse-resultat')).includes('pas encore téléchargée'), 'test de vitesse sans l’IA : on explique qu’il faut d’abord un détourage');
+    await p.goBack();
+    await p.waitForTimeout(300);
+    verifier((await etat(p)).vue === 'accueil', 'le retour du téléphone ramène à l’accueil');
+    const debord = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    verifier(debord <= 0, 'l’écran tient dans le téléphone', debord);
+    await t.ctx.close();
+  });
+
+  await section('Collage', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    // Une seule photo : il en faut au moins deux
+    await donnerFichier(p, '[data-action="ouvrir-collage"]', [{ name: 'a.jpg', mimeType: 'image/jpeg', buffer: await fabriquerImage(p, 400, 300) }]);
+    await p.waitForTimeout(400);
+    verifier((await texte(p, '#message-texte')).includes('au moins 2 photos'), 'une seule photo : message clair');
+    const photos = [];
+    for (const [l, h] of [[800, 600], [600, 800], [700, 700]]) photos.push({ name: `p${l}.jpg`, mimeType: 'image/jpeg', buffer: await fabriquerImage(p, l, h) });
+    await donnerFichier(p, '[data-action="ouvrir-collage"]', photos);
+    await p.waitForFunction(() => document.querySelector('#fenetre-collage').open, null, { timeout: 15000 });
+    verifier((await p.$$eval('input[name="co-disposition"]', (l) => l.length)) === 4, '3 photos : 4 dispositions proposées');
+    await p.click('label.choix:has(input[name="co-disposition"][value="grande-gauche"])');
+    await p.click('label.choix:has(input[name="co-format"][value="paysage"])');
+    await p.click('.nuancier[data-cible="co-couleur"] .pastille:nth-child(3)');   // jaune
+    const apercu = await p.evaluate(() => { const c = document.querySelector('#co-apercu'); return [c.width, c.height]; });
+    verifier(apercu[0] > apercu[1], 'l’aperçu suit le format (paysage)', apercu);
+    await p.click('[data-action="creer-collage"]');
+    await attendreFin(p);
+    const e = await etat(p);
+    verifier(e.vue === 'editeur' && e.doc.largeur === 2048 && e.doc.hauteur === 1152, 'nouveau montage au format paysage', [e.doc.largeur, e.doc.hauteur]);
+    verifier(e.doc.calques[0].type === 'fond' && e.doc.calques[0].couleur === '#f4d35e' && e.doc.calques.filter((c) => c.type === 'image').length === 3, 'un fond jaune et trois photos');
+    const grande = e.doc.calques[1];
+    verifier(Math.abs(grande.x - 2048 / 4) < 40 && grande.hauteur > 1000, 'la première photo occupe la grande case de gauche', [grande.x, grande.hauteur]);
+    const ex = await exporterPixels(p, [[10, 10], [Math.round(grande.x), Math.round(grande.y)]]);
+    verifier(ex.pixels[0][0] > 230 && ex.pixels[0][2] < 120, 'export : la marge montre le fond jaune', ex.pixels[0]);
+    verifier(ex.pixels[1][3] === 255 && !(ex.pixels[1][0] > 230 && ex.pixels[1][2] < 120), 'et la photo remplit sa case', ex.pixels[1]);
+    await t.ctx.close();
+  });
+
+  await section('Partager depuis la galerie (menu « Partager » d’Android)', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await p.evaluate(() => navigator.serviceWorker.ready);
+    await p.reload();
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui' && !!navigator.serviceWorker.controller);
+    const manifeste = JSON.parse(fs.readFileSync(path.join(RACINE, 'manifest.json'), 'utf8'));
+    verifier(manifeste.share_target && manifeste.share_target.action === './partage' && manifeste.share_target.params.files[0].name === 'photos', 'le manifeste annonce Omni-Photo dans le menu « Partager »');
+    // Ce que fait Android : envoyer la photo à « ./partage »
+    const envoyer = (tailles) => p.evaluate(async (tailles) => {
+      const formulaire = document.createElement('form');
+      formulaire.method = 'POST'; formulaire.action = './partage'; formulaire.enctype = 'multipart/form-data';
+      const champ = document.createElement('input'); champ.type = 'file'; champ.name = 'photos'; champ.multiple = true;
+      const dt = new DataTransfer();
+      for (const [l, h] of tailles) {
+        const c = document.createElement('canvas'); c.width = l; c.height = h; c.getContext('2d').fillRect(0, 0, l, h);
+        dt.items.add(new File([await new Promise((ok) => c.toBlob(ok, 'image/png'))], `photo-${l}.png`, { type: 'image/png' }));
+      }
+      champ.files = dt.files;
+      formulaire.append(champ);
+      document.body.append(formulaire);
+      formulaire.submit();
+    }, tailles);
+    await Promise.all([p.waitForNavigation(), envoyer([[640, 480]])]);
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await p.waitForFunction(() => Montage.doc && Montage.doc.largeur === 640, null, { timeout: 15000 }).catch(() => {});
+    let e = await etat(p);
+    verifier(e.vue === 'editeur' && e.doc && e.doc.largeur === 640 && e.doc.hauteur === 480, 'une photo partagée s’ouvre directement dans l’éditeur', e.doc && [e.doc.largeur, e.doc.hauteur]);
+    await p.click('[data-action="accueil"]');
+    await Promise.all([p.waitForNavigation(), envoyer([[300, 200], [200, 300]])]);
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await p.waitForFunction(() => document.querySelector('#fenetre-collage').open, null, { timeout: 15000 }).catch(() => {});
+    verifier(await p.$eval('#fenetre-collage', (d) => d.open), 'plusieurs photos partagées : le collage s’ouvre');
+    verifier(await p.evaluate(async () => (await (await caches.open('omni-photo-partage')).keys()).length === 0), 'la réserve des photos partagées est vidée');
+    await t.ctx.close();
+  });
+
+
+  await section('Correcteur : effacer un défaut et copier une zone', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    // Un mur gris-bleu avec une tache sombre, et un carré rouge (pour « copier »)
+    const mur = Buffer.from(await p.evaluate(async () => {
+      const c = document.createElement('canvas'); c.width = 600; c.height = 400; const x = c.getContext('2d');
+      x.fillStyle = '#8899aa'; x.fillRect(0, 0, 600, 400);
+      x.fillStyle = '#111111'; x.beginPath(); x.arc(300, 200, 9, 0, 7); x.fill();
+      x.fillStyle = '#e4572e'; x.fillRect(70, 70, 60, 60);
+      const b = await new Promise((ok) => c.toBlob(ok, 'image/png'));
+      return [...new Uint8Array(await b.arrayBuffer())];
+    }));
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'mur.png', mimeType: 'image/png', buffer: mur });
+    await attendreFin(p);
+    const photo = (await etat(p)).doc.calques[0];
+    await toucherOutil(p, 'outil-correcteur');
+    verifier(await p.evaluate(() => Editeur.outil === OutilCorrecteur), 'le correcteur s’ouvre (onglet « Retoucher »)');
+    await p.evaluate(() => { const r = document.querySelector('#cr-taille'); r.value = 30; r.dispatchEvent(new Event('input', { bubbles: true })); });
+    const tache = await versEcran(p, 300, 200), tache2 = await versEcran(p, 304, 202);
+    const effacer = () => doigts(p, [['pointerdown', 1, tache.x, tache.y], ['pointermove', 1, tache2.x, tache2.y], ['pointerup', 1, tache2.x, tache2.y]]);
+    await effacer();
+    let px = await pixel(p, photo.ressource, 300, 200, true);
+    verifier(Math.abs(px[0] - 0x88) < 22 && Math.abs(px[2] - 0xaa) < 22, 'effacer : la tache disparaît, remplie par le mur autour', px);
+    px = await pixel(p, photo.ressource, 300, 200);
+    verifier(px[0] < 40, 'la vraie image n’est pas encore touchée', px);
+    await p.click('[data-action="correcteur-comparer"]');
+    verifier(await p.evaluate(() => Rendu.remplacements.size === 0), '« Voir l’original » compare');
+    await p.click('[data-action="correcteur-comparer"]');
+    await p.click('[data-action="correcteur-retirer"]');
+    verifier(await p.evaluate(() => OutilCorrecteur.operations.length === 0), '« Retirer le dernier » enlève la correction');
+    await effacer();
+    // Copier une zone : le carré rouge, recopié plus loin
+    await p.click('label.choix:has(input[name="cr-mode"][value="copier"])');
+    verifier((await texte(p, '#cr-etat')).includes('endroit à recopier'), 'copier : on demande d’abord l’endroit à recopier');
+    const source = await versEcran(p, 100, 100);
+    await doigts(p, [['pointerdown', 1, source.x, source.y], ['pointerup', 1, source.x, source.y]]);
+    verifier(await p.evaluate(() => !!OutilCorrecteur.pointSource && OutilCorrecteur.operations.length === 1), 'l’endroit à recopier est choisi (sans peindre)');
+    verifier(!(await p.$eval('[data-action="correcteur-source"]', (b) => b.hidden)), 'on peut choisir un autre endroit');
+    const cible = await versEcran(p, 450, 300), cible2 = await versEcran(p, 455, 302);
+    // Un 2e doigt pendant le trait : c'est un zoom, rien n'est peint
+    await doigts(p, [['pointerdown', 1, cible.x, cible.y], ['pointermove', 1, cible2.x, cible2.y], ['pointerdown', 2, cible.x + 90, cible.y],
+      ['pointermove', 2, cible.x + 120, cible.y], ['pointerup', 2, cible.x + 120, cible.y], ['pointerup', 1, cible2.x, cible2.y]]);
+    px = await pixel(p, photo.ressource, 450, 300, true);
+    verifier(Math.abs(px[0] - 0x88) < 10 && await p.evaluate(() => OutilCorrecteur.operations.length === 1), 'un 2e doigt annule le trait commencé', px);
+    await p.click('[data-action="voir-tout"]');
+    const c1 = await versEcran(p, 450, 300), c2 = await versEcran(p, 454, 302);
+    await doigts(p, [['pointerdown', 1, c1.x, c1.y], ['pointermove', 1, c2.x, c2.y], ['pointerup', 1, c2.x, c2.y]]);
+    px = await pixel(p, photo.ressource, 450, 300, true);
+    verifier(px[0] > 200 && px[1] < 120, 'copier : le rouge de la zone choisie apparaît sous le doigt', px);
+    await p.click('[data-action="correcteur-valider"]');
+    let e = await etat(p);
+    const corrigee = e.doc.calques[0].ressource;
+    verifier(corrigee !== photo.ressource && e.passe === 1 && !(await p.evaluate(() => Editeur.outil)), 'valider : nouvelle image, une étape d’« Annuler »');
+    px = await pixel(p, corrigee, 300, 200);
+    const px2 = await pixel(p, corrigee, 450, 300);
+    verifier(Math.abs(px[0] - 0x88) < 22 && px2[0] > 200, 'les deux corrections sont dans l’image', [px, px2]);
+    await p.click('[data-action="annuler"]');
+    verifier((await etat(p)).doc.calques[0].ressource === photo.ressource, '« Annuler » rend la photo d’origine');
+    await t.ctx.close();
+  });
+
+  await section('Modèles tout prêts', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await p.click('[data-action="ouvrir-modeles"]');
+    await p.waitForTimeout(600);
+    const cartes = await p.$$eval('#liste-modeles .carte-modele', (l) => l.map((b) => b.dataset.id));
+    verifier(cartes.length === 6, 'six modèles proposés', cartes);
+    const dessine = await p.$$eval('#liste-modeles canvas', (l) => l.every((c) => { const d = c.getContext('2d').getImageData(c.width / 2, c.height / 2, 1, 1).data; return d[3] > 0; }));
+    verifier(dessine, 'chaque modèle a son aperçu');
+    // Un modèle sans photo : directement dans l'éditeur
+    await p.click('.carte-modele[data-id="citation"]');
+    await attendreFin(p);
+    let e = await etat(p);
+    verifier(e.vue === 'editeur' && e.doc.largeur === 2048 && e.doc.calques[0].type === 'fond' && e.doc.calques.some((c) => c.texte === '— Ton nom'), 'modèle « Citation » : prêt dans l’éditeur');
+    // Toucher un texte du modèle, puis le modifier
+    const nom = e.doc.calques.find((c) => c.texte === '— Ton nom');
+    const m = await ecranDe(p, nom.id);
+    await doigts(p, [['pointerdown', 1, m.x, m.y], ['pointerup', 1, m.x, m.y]]);
+    verifier((await etat(p)).selection === nom.id, 'un texte du modèle se choisit d’un toucher');
+    await p.click('[data-action="modifier-texte"]');
+    await p.fill('#t-texte', '— Ferrus');
+    await p.click('#fenetre-texte [data-action="fermer-fenetre"]');
+    verifier((await etat(p)).doc.calques.some((c) => c.texte === '— Ferrus'), 'et se modifie comme les autres');
+    // Un modèle avec une photo ronde
+    await p.click('[data-action="accueil"]');
+    await p.click('[data-action="ouvrir-modeles"]');
+    await p.click('.carte-modele[data-id="anniversaire"]');
+    verifier(!(await p.$eval('#modele-etape-photo', (z) => z.hidden)) && (await texte(p, '#modele-nom')) === 'Anniversaire', 'on propose d’ajouter une photo');
+    await donnerFichier(p, '[data-action="modele-photo"]', { name: 'moi.jpg', mimeType: 'image/jpeg', buffer: await fabriquerImage(p, 900, 600) });
+    await attendreFin(p);
+    e = await etat(p);
+    const ph = e.doc.calques.find((c) => c.type === 'image');
+    verifier(e.vue === 'editeur' && ph && ph.largeur === 1024 && ph.hauteur === 1024, 'la photo prend la place prévue', ph && [ph.largeur, ph.hauteur]);
+    let px = await pixel(p, ph.ressource, 10, 10);
+    const px2 = await pixel(p, ph.ressource, 512, 512);
+    verifier(px[3] === 0 && px2[3] === 255, 'la photo est ronde (coins transparents)', [px, px2]);
+    verifier(e.doc.calques.some((c) => c.texte === 'Joyeux anniversaire !' && c.courbure === 30), 'le titre est en arc');
+    // Un modèle sans sa photo : une zone claire marque la place
+    await p.click('[data-action="accueil"]');
+    await p.click('[data-action="ouvrir-modeles"]');
+    await p.click('.carte-modele[data-id="youtube"]');
+    await p.click('[data-action="modele-sans-photo"]');
+    await attendreFin(p);
+    e = await etat(p);
+    verifier(e.doc.largeur === 1280 && e.doc.hauteur === 720 && e.doc.calques.some((c) => c.nom === 'Emplacement photo'), 'modèle « Miniature YouTube » sans photo : la place est marquée', [e.doc.largeur, e.doc.hauteur]);
+    verifier((await texte(p, '#message-texte')).includes('« Image »'), 'le message explique comment ajouter la photo');
+    const ex = await exporterPixels(p, [[5, 5], [640, 360]]);
+    verifier(ex.taille[0] === 1280 && ex.pixels.every((x) => x[3] === 255), 'le modèle s’exporte (1 280 × 720, sans trou)', ex.taille);
+    const liste = await (async () => { await p.click('[data-action="accueil"]'); await p.waitForTimeout(800); return p.$$eval('#liste-montages strong', (l) => l.map((x) => x.textContent)); })();
+    verifier(liste.some((n) => n.startsWith('Miniature YouTube — ')), 'le montage porte le nom du modèle', liste);
     await t.ctx.close();
   });
 

@@ -13,7 +13,7 @@
    de la liste FICHIERS ci-dessous, en même temps que VERSION dans app.js.
    Sinon, les téléphones qui ont déjà ouvert l'application gardent
    l'ancienne version. */
-const CACHE = 'omni-photo-v5';
+const CACHE = 'omni-photo-v6';
 
 /* Les photos reçues du menu « Partager » d'Android, le temps que la page
    les ouvre (version 1.2). */
@@ -64,9 +64,11 @@ const FICHIERS = [
   './collage.js',
   './diagnostic.js',
   './correcteur.js',
+  './cacher.js',
   './modeles.js',
   './detourage-travail.js',
   './export.js',
+  './impression.js',
   './sauvegarde.js',
   './app.js',
   './manifest.json',

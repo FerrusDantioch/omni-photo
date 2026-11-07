@@ -17,6 +17,8 @@ Puis 1.2.0 : 11 autres suggestions (partage Android, collage, « Vérifier mon
 téléphone », bouton Auto, signature, format YouTube, texte en arc / bandeau /
 espacement, sauvegarde de tout, astuce émojis, puis les deux plus ambitieuses
 en dernier : correcteur et modèles tout prêts).
+Puis 1.3.0 : « Cacher » (pixels / flou) et « Imprimer » (feuille + PDF),
+demandés par l'auteur avant ses essais sur ses appareils.
 
 ## ⚠️ Contraintes à préserver
 
@@ -57,7 +59,7 @@ en dernier : correcteur et modèles tout prêts).
   autrement à l'export).
 - `Editeur.outil` : `OutilYeux`, `OutilDecoupe`, `OutilPinceau`
   (retouches.js), `OutilIA` (ia.js), `OutilRecadrage`, `OutilLumiere`,
-  `OutilFlou`, `OutilCorrecteur`. Interface : `panneau` (id du `.panneau-outil`), `commencer(c)`,
+  `OutilFlou`, `OutilCorrecteur`, `OutilCacher`. Interface : `panneau` (id du `.panneau-outil`), `commencer(c)`,
   `appui(p)` → vrai si l'outil prend le doigt (sinon le doigt déplace la vue),
   `mouvement`, `relache`, `interrompre` (2e doigt = zoom, trait oublié),
   `toucher(p)` (simple toucher), `dessiner(ctx)` (pixels d'écran),
@@ -153,6 +155,26 @@ en dernier : correcteur et modèles tout prêts).
     le même `Sauvegarde.depuisFichier()` (qui renvoie une liste de numéros).
   - Diagnostic (diagnostic.js) : vue `verifier` ; `etatHorsLigne()` (app.js).
   - Lumière : `OutilLumiere.auto()` (histogramme d'une copie de 200 px).
+- **Version 1.3** :
+  - Cacher (cacher.js, `OutilCacher`) : zones en pixels de l'image
+    (`{ points }` polygone pour rectangle / ovale tracés à l'écran, ou
+    `{ points, rayon }` au doigt). Effet et force communs à toutes les zones,
+    l'aperçu est refait depuis l'original (`_calculer`). Taille des carrés /
+    du flou d'après la ZONE (`taille(zone, l, h)` : ~6 carrés sur son petit
+    côté à la force 5) avec un minimum lié à la photo. Pixels : grille calée
+    sur le coin de l'image, tout carré touché (masque > 100) prend la moyenne
+    pondérée par l'opacité. Flou : région réduite + `flouBoite()` (3 passes,
+    bords étirés) + masque élargi puis adouci (le bord tracé reste caché).
+    Appliqué aussi à `source` (sinon le pinceau « Restaurer » ferait revenir
+    ce qui est caché). Zone plate (< 8 px d'écran) refusée.
+  - Imprimer (impression.js) : `miseEnPage(papier, nombre, rapport,
+    { remplir, marge })` en mm (essaie feuille en hauteur / largeur et grille
+    dans les deux sens). La feuille est dessinée en JPG (150 à 300 points par
+    pouce, blanc = papier) ; `window.print()` l'affiche seule (`#impression`,
+    `@page` dans `#style-impression`, styles `@media print`) et l'image reste
+    en place après (Android prépare l'impression plus tard). `fabriquerPDF()`
+    écrit un PDF 1.4 d'une page (image DCTDecode, titre UTF-16, table xref de
+    lignes de 20 octets). Derniers choix dans `omniphoto-impression`.
 - Message et « Patiente » sont des `popover` (au-dessus des fenêtres) ; mais
   une fenêtre modale rend le reste inerte : fermer la fenêtre avant un message
   d'erreur qui demande « D'accord ».
@@ -165,7 +187,7 @@ en dernier : correcteur et modèles tout prêts).
 
 ## Tests
 
-`node tests/tester.js` (Playwright + Chromium ; environ 300 vérifications, dont le détourage hors ligne) ;
+`node tests/tester.js` (Playwright + Chromium ; environ 350 vérifications, dont le détourage hors ligne) ;
 `RAPIDE=1` saute les contrôles communs. `tests/outils.js` = boîte à outils
 commune à plusieurs applications de l'Omni-système.
 Servir le dossier parent pour reproduire l'adresse de GitHub Pages

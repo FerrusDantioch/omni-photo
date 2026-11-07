@@ -13,7 +13,7 @@ Application de l'Omni-système, par Ferrus Dantioch.
 
 ## Ce que fait l'application
 
-État actuel : **version 1.2.0** (les trois étapes du plan, puis deux séries de 11 améliorations).
+État actuel : **version 1.3.0** (les trois étapes du plan, deux séries de 11 améliorations, puis « Cacher » et « Imprimer »).
 
 | Fonction | État |
 |---|---|
@@ -52,6 +52,8 @@ Application de l'Omni-système, par Ferrus Dantioch.
 | **1.2** Sauvegarder tous les montages dans un seul fichier | ✅ |
 | **1.2** Correcteur : effacer un petit défaut, ou recopier une zone (tampon) | ✅ |
 | **1.2** Modèles tout prêts : anniversaire, invitation, grande nouvelle, miniature YouTube, souvenir, citation | ✅ |
+| **1.3** Cacher une partie de la photo (visage, plaque, adresse) : pixels ou flou, en rectangle, en ovale ou au doigt | ✅ |
+| **1.3** Imprimer : photo 10 × 15, 13 × 18, A5 ou A4, 1 à 9 fois sur la feuille ; ou fichier PDF aux dimensions exactes | ✅ |
 
 Les très grandes photos sont réduites à 4 096 pixels de côté pour rester
 fluides sur un téléphone milieu de gamme (un message le signale).
@@ -105,6 +107,32 @@ ouvrir l'adresse dans **Google Chrome** sur le téléphone :
 14. Pour vérifier le hors ligne : mettez le téléphone en mode avion, puis
     rouvrez Omni-Photo et essayez « Détourer ».
 
+## Cacher une partie de la photo
+
+Avant de partager une photo, vous pouvez rendre méconnaissable un visage, une
+plaque d'immatriculation ou une adresse : onglet « Retoucher », outil
+« Cacher ». Tracez la zone du doigt (rectangle, ovale ou forme libre).
+« Pixels » est le plus sûr : rien ne se devine. Une fois « Valider » touché,
+ce qui est caché est **vraiment effacé de l'image** (pas seulement recouvert) :
+l'image exportée, le montage enregistré et le fichier « .omniphoto » ne le
+contiennent plus. Tant que le montage est ouvert, « Annuler » permet encore de
+revenir en arrière.
+
+## Imprimer
+
+« Exporter », puis « Imprimer ou faire un PDF… » : choisissez le papier
+(photo 10 × 15, 13 × 18, A5 ou A4) et combien de fois l'image doit y figurer
+(1, 2, 4 ou 9 : pratique pour des étiquettes). L'aperçu montre la feuille et
+annonce la qualité d'impression.
+- « Imprimer… » ouvre l'impression du téléphone (une imprimante, ou
+  « Enregistrer au format PDF »).
+- « Enregistrer en PDF » fabrique un fichier PDF aux dimensions exactes du
+  papier, idéal pour un magasin photo. Si « Imprimer… » ne fait rien sur votre
+  téléphone, ouvrez ce PDF : votre téléphone proposera alors d'imprimer.
+
+Le PDF est fabriqué par l'application elle-même, sans aucune bibliothèque
+extérieure, et rien n'est envoyé sur internet.
+
 ## Le menu « Partager » d'Android
 
 Une fois Omni-Photo **installée** sur le téléphone, elle apparaît dans le menu
@@ -153,6 +181,8 @@ Tous les fichiers sont à la racine (plus simple à envoyer depuis un téléphon
 | `collage.js` | le collage |
 | `modeles.js` | les modèles tout prêts |
 | `correcteur.js` | le correcteur (effacer un défaut, copier une zone) |
+| `cacher.js` | « Cacher » (pixels ou flou sur une zone) |
+| `impression.js` | l'impression et le fichier PDF |
 | `signature.js` | « Ma signature » |
 | `diagnostic.js` | l'écran « Vérifier mon téléphone » |
 | `modnet.onnx` | le modèle d'IA MODNet, mode « Une personne » (licence Apache 2.0) |
@@ -170,7 +200,7 @@ Tous les fichiers sont à la racine (plus simple à envoyer depuis un téléphon
 ## Tests automatiques (sur ordinateur)
 
 Ils ouvrent l'application dans un vrai navigateur qui imite un téléphone, puis
-une tablette, et vérifient environ 300 points : ouverture de photos, textes,
+une tablette, et vérifient environ 350 points : ouverture de photos, textes,
 gestes, annuler, export, sauvegarde, hors ligne, messages d'erreur…
 
 ```bash

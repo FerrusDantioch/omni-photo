@@ -40,8 +40,10 @@
 <script defer src="./collage.js"></script>
 <script defer src="./diagnostic.js"></script>
 <script defer src="./correcteur.js"></script>
+<script defer src="./cacher.js"></script>
 <script defer src="./modeles.js"></script>
 <script defer src="./export.js"></script>
+<script defer src="./impression.js"></script>
 <script defer src="./sauvegarde.js"></script>
 <script defer src="./montages.js"></script>
 <script defer src="./app.js"></script>
@@ -100,6 +102,9 @@
     <symbol id="i-auto" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19l5-14h1l5 14"/><path d="M7 14h8"/><path d="M19 3l.6 1.4L21 5l-1.4.6L19 7l-.6-1.4L17 5l1.4-.6z" fill="currentColor" stroke-width="1"/></g></symbol>
     <symbol id="i-correcteur" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6-9 9H5v-6z"/><path d="M11 7l6 6" opacity=".6"/><path d="M3 21h18"/></g></symbol>
     <symbol id="i-modele" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h6" stroke-linecap="round"/><rect x="13" y="13" width="5" height="5" rx="1" fill="currentColor" fill-opacity=".35"/></g></symbol>
+    <symbol id="i-cacher" viewBox="0 0 24 24"><g fill="currentColor"><rect x="3" y="3" width="5.5" height="5.5" rx="1"/><rect x="9.25" y="3" width="5.5" height="5.5" rx="1" opacity=".45"/><rect x="15.5" y="3" width="5.5" height="5.5" rx="1"/><rect x="3" y="9.25" width="5.5" height="5.5" rx="1" opacity=".45"/><rect x="9.25" y="9.25" width="5.5" height="5.5" rx="1"/><rect x="15.5" y="9.25" width="5.5" height="5.5" rx="1" opacity=".45"/><rect x="3" y="15.5" width="5.5" height="5.5" rx="1"/><rect x="9.25" y="15.5" width="5.5" height="5.5" rx="1" opacity=".45"/><rect x="15.5" y="15.5" width="5.5" height="5.5" rx="1"/></g></symbol>
+    <symbol id="i-imprimer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z" fill="currentColor" fill-opacity=".2"/><path d="M17.5 12h.01" stroke-linecap="round" stroke-width="2.6"/></g></symbol>
+    <symbol id="i-pdf" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h4"/></g></symbol>
     <symbol id="i-installer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 7v7M9 11l3 3 3-3"/></g></symbol>
   </defs>
 </svg>
@@ -223,12 +228,13 @@
         <button type="button" class="bouton outil" data-action="ouvrir-calques"><svg class="icone" aria-hidden="true"><use href="#i-calques"/></svg>Calques</button>
         <button type="button" class="bouton outil" data-action="ajouter-signature"><svg class="icone" aria-hidden="true"><use href="#i-signature"/></svg>Signature</button>
       </div>
-      <div class="grille-outils quatre" data-groupe="retoucher" hidden>
+      <div class="grille-outils trois" data-groupe="retoucher" hidden>
         <button type="button" class="bouton outil" data-action="outil-recadrage"><svg class="icone" aria-hidden="true"><use href="#i-recadrer"/></svg>Recadrer</button>
         <button type="button" class="bouton outil" data-action="outil-lumiere"><svg class="icone" aria-hidden="true"><use href="#i-lumiere"/></svg>Lumière</button>
         <button type="button" class="bouton outil" data-action="outil-yeux"><svg class="icone" aria-hidden="true"><use href="#i-yeux"/></svg>Yeux rouges</button>
         <button type="button" class="bouton outil" data-action="outil-decoupe"><svg class="icone" aria-hidden="true"><use href="#i-ciseaux"/></svg>Découper</button>
         <button type="button" class="bouton outil" data-action="outil-correcteur"><svg class="icone" aria-hidden="true"><use href="#i-correcteur"/></svg>Correcteur</button>
+        <button type="button" class="bouton outil" data-action="outil-cacher"><svg class="icone" aria-hidden="true"><use href="#i-cacher"/></svg>Cacher</button>
       </div>
       <div class="grille-outils quatre" data-groupe="detourage" hidden>
         <button type="button" class="bouton outil" data-action="outil-ia"><svg class="icone" aria-hidden="true"><use href="#i-magie"/></svg>Détourer</button>
@@ -271,7 +277,7 @@
       <!-- Les retouches d'une image : toujours là, même si l'image est verrouillée -->
       <div id="retouches-calque">
         <p class="etiquette titre-retouches">Retoucher cette image</p>
-        <div class="grille-outils quatre">
+        <div class="grille-outils trois">
           <button type="button" class="bouton outil" data-action="outil-lumiere"><svg class="icone" aria-hidden="true"><use href="#i-lumiere"/></svg>Lumière</button>
           <button type="button" class="bouton outil" data-action="ouvrir-effets"><svg class="icone" aria-hidden="true"><use href="#i-autocollant"/></svg>Contour et ombre</button>
           <button type="button" class="bouton outil" data-action="outil-ia"><svg class="icone" aria-hidden="true"><use href="#i-magie"/></svg>Détourer</button>
@@ -280,6 +286,7 @@
           <button type="button" class="bouton outil" data-action="outil-yeux"><svg class="icone" aria-hidden="true"><use href="#i-yeux"/></svg>Yeux rouges</button>
           <button type="button" class="bouton outil" data-action="outil-decoupe"><svg class="icone" aria-hidden="true"><use href="#i-ciseaux"/></svg>Découper</button>
           <button type="button" class="bouton outil" data-action="outil-correcteur"><svg class="icone" aria-hidden="true"><use href="#i-correcteur"/></svg>Correcteur</button>
+          <button type="button" class="bouton outil" data-action="outil-cacher"><svg class="icone" aria-hidden="true"><use href="#i-cacher"/></svg>Cacher</button>
         </div>
       </div>
     </div>
@@ -448,6 +455,36 @@
         <button type="button" class="bouton outil principal" data-action="correcteur-valider"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Valider</button>
       </div>
       <p class="aide astuce">Zoome à deux doigts sur le défaut pour plus de précision. « Effacer » marche le mieux sur un fond assez uni (peau, ciel, mur) ; pour l'herbe ou le sable, préfère « Copier une zone ».</p>
+    </div>
+
+    <!-- Outil « Cacher » (voir cacher.js) -->
+    <div id="outil-cacher" class="panneau-outil" hidden>
+      <div class="tete-calque">
+        <p class="nom-choisi">Cacher une partie</p>
+        <button type="button" class="bouton petit" data-action="outil-fermer"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Fermer</button>
+      </div>
+      <p class="aide nom-cible"></p>
+      <p id="ca-etat" class="etat-outil"></p>
+      <fieldset class="choix-groupe deux">
+        <legend>Effet</legend>
+        <label class="choix"><input type="radio" name="ca-effet" value="pixels" checked><span>Pixels<small>le plus sûr</small></span></label>
+        <label class="choix"><input type="radio" name="ca-effet" value="flou"><span>Flou<small>plus doux</small></span></label>
+      </fieldset>
+      <fieldset class="choix-groupe trois">
+        <legend>Zone</legend>
+        <label class="choix"><input type="radio" name="ca-forme" value="rectangle" checked><span>Rectangle<small>plaque, adresse</small></span></label>
+        <label class="choix"><input type="radio" name="ca-forme" value="ovale"><span>Ovale<small>visage</small></span></label>
+        <label class="choix"><input type="radio" name="ca-forme" value="doigt"><span>Au doigt<small>forme libre</small></span></label>
+      </fieldset>
+      <label class="curseur"><span>Force</span><input type="range" id="ca-force" min="1" max="10" step="1" value="5"><output></output></label>
+      <label class="curseur" id="ca-zone-taille" hidden><span>Taille du doigt</span><input type="range" id="ca-taille" min="8" max="80" step="1" value="28"><output></output></label>
+      <div class="grille-outils trois">
+        <button type="button" class="bouton outil" data-action="cacher-comparer"><svg class="icone" aria-hidden="true"><use href="#i-comparer"/></svg><span class="texte-bouton">Voir l'original</span></button>
+        <button type="button" class="bouton outil" data-action="cacher-retirer"><svg class="icone" aria-hidden="true"><use href="#i-annuler"/></svg>Retirer le dernier</button>
+        <button type="button" class="bouton outil principal" data-action="cacher-valider"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Valider</button>
+      </div>
+      <p class="aide astuce">Pour un visage, une plaque d'immatriculation, une adresse… avant de partager ta photo.
+        Deux doigts pour zoomer. Les pixels ne laissent rien deviner ; un flou léger, si.</p>
     </div>
 
     <!-- Outil « Découper la silhouette » (voir retouches.js) -->
@@ -881,8 +918,40 @@
   <div class="pile serree">
     <button type="button" class="bouton principal large" data-action="enregistrer"><svg class="icone" aria-hidden="true"><use href="#i-export"/></svg>Enregistrer dans le téléphone</button>
     <button type="button" class="bouton large" data-action="partager"><svg class="icone" aria-hidden="true"><use href="#i-partager"/></svg>Partager…</button>
+    <button type="button" class="bouton large" data-action="ouvrir-impression"><svg class="icone" aria-hidden="true"><use href="#i-imprimer"/></svg>Imprimer ou faire un PDF…</button>
     <button type="button" class="bouton large discret" data-action="fermer-fenetre"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Fermer</button>
   </div>
+</dialog>
+
+<!-- Imprimer (voir impression.js) -->
+<dialog id="fenetre-impression" class="fenetre" aria-labelledby="titre-impression">
+  <h2 id="titre-impression">Imprimer</h2>
+  <canvas id="i-apercu" class="apercu-impression" width="240" height="200" aria-label="Aperçu de la feuille"></canvas>
+  <p class="aide" id="i-qualite" role="status"></p>
+  <fieldset class="choix-groupe quatre">
+    <legend>Papier</legend>
+    <label class="choix"><input type="radio" name="i-papier" value="10x15"><span>10 × 15<small>photo</small></span></label>
+    <label class="choix"><input type="radio" name="i-papier" value="13x18"><span>13 × 18<small>photo</small></span></label>
+    <label class="choix"><input type="radio" name="i-papier" value="a5"><span>A5<small>½ feuille</small></span></label>
+    <label class="choix"><input type="radio" name="i-papier" value="a4" checked><span>A4<small>feuille</small></span></label>
+  </fieldset>
+  <fieldset class="choix-groupe quatre">
+    <legend>Combien de fois sur la feuille ?</legend>
+    <label class="choix"><input type="radio" name="i-nombre" value="1" checked><span>1</span></label>
+    <label class="choix"><input type="radio" name="i-nombre" value="2"><span>2</span></label>
+    <label class="choix"><input type="radio" name="i-nombre" value="4"><span>4</span></label>
+    <label class="choix"><input type="radio" name="i-nombre" value="9"><span>9<small>étiquettes</small></span></label>
+  </fieldset>
+  <label class="interrupteur"><input type="checkbox" id="i-marge" checked><span>Marge blanche autour</span></label>
+  <label class="interrupteur"><input type="checkbox" id="i-remplir"><span>Remplir les cases (les bords de l'image peuvent être coupés)</span></label>
+  <p class="aide">Imprimante de maison : garde la marge. Magasin photo : enregistre le PDF et envoie-le-leur.</p>
+  <div class="pile serree">
+    <button type="button" class="bouton principal large" data-action="imprimer"><svg class="icone" aria-hidden="true"><use href="#i-imprimer"/></svg>Imprimer…</button>
+    <button type="button" class="bouton large" data-action="imprimer-pdf"><svg class="icone" aria-hidden="true"><use href="#i-pdf"/></svg>Enregistrer en PDF</button>
+    <button type="button" class="bouton large" data-action="partager-pdf"><svg class="icone" aria-hidden="true"><use href="#i-partager"/></svg>Partager le PDF…</button>
+    <button type="button" class="bouton large discret" data-action="fermer-fenetre"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Fermer</button>
+  </div>
+  <p class="aide">Si « Imprimer… » ne fait rien sur ton téléphone, enregistre le PDF puis ouvre-le : il propose alors d'imprimer.</p>
 </dialog>
 
 <!-- Sélecteurs de fichiers, cachés : on les ouvre avec les boutons -->
@@ -894,6 +963,10 @@
 <input type="file" id="fichier-montage" hidden>
 <input type="file" id="fichier-collage" accept="image/*" multiple hidden>
 <input type="file" id="fichier-modele" accept="image/*" hidden>
+
+<!-- La feuille à imprimer : invisible à l'écran, seule visible à l'impression -->
+<div id="impression" aria-hidden="true"><img alt=""></div>
+<style id="style-impression"></style>
 
 <!-- Le guide de la première fois (voir guide.js) -->
 <div id="guide" class="guide" popover="manual" hidden role="dialog" aria-labelledby="guide-texte">

@@ -11,6 +11,11 @@
    ============================================================ */
 'use strict';
 
+/* Un texte en arc tourné vers le haut (comme un arc-en-ciel) ? */
+function courbureVersLeHaut(c) {
+  return (c.courbure || 0) > 0;
+}
+
 const Rendu = {
   /* Une petite toile cachée qui sert seulement à mesurer les textes. */
   _mesureur: null,
@@ -32,26 +37,48 @@ const Rendu = {
   },
 
   /* Découpe un texte en lignes et mesure la boîte qui l'entoure.
-     Renvoie { largeur, hauteur, lignes, interligne, marge }. */
+     Renvoie { largeur, hauteur, lignes, largeurs, interligne, marge, arc }.
+     Version 1.2 : espacement des lettres (c.espacement, fraction de la
+     taille), texte en arc (c.courbure, de -100 à +100) et bandeau de
+     couleur derrière le texte (c.bandeau). */
   mesurerTexte(c) {
-    const cle = [c.texte, c.police, c.taille, c.gras, c.contour.actif && c.contour.epaisseur].join('|');
+    const espacement = c.espacement || 0, courbure = c.courbure || 0;
+    const bandeau = !!(c.bandeau && c.bandeau.actif);
+    const cle = [c.texte, c.police, c.taille, c.gras, c.contour.actif && c.contour.epaisseur, espacement, courbure, bandeau].join('|');
     const connu = this._cacheMesures.get(cle);
     if (connu) return connu;
 
     const ctx = this._ctxMesure();
     ctx.font = Polices.css(c.police, c.taille, c.gras);
+    ctx.letterSpacing = '0px';
+    const ecart = espacement * c.taille;
     const lignes = String(c.texte).split('\n');
     const interligne = c.taille * 1.25;
-    let largeurMax = 0;
-    for (const l of lignes) largeurMax = Math.max(largeurMax, ctx.measureText(l).width);
-    // Un peu de marge autour, pour les lettres qui dépassent (j, g, f…)
-    // et pour le contour.
-    const marge = c.taille * 0.2 + (c.contour.actif ? c.contour.epaisseur * c.taille : 0);
-    const mesure = {
-      largeur: Math.max(c.taille * 0.5, largeurMax) + marge * 2,
-      hauteur: lignes.length * interligne + marge * 2,
-      lignes, interligne, marge
-    };
+    // Largeur d'une ligne, lettre par lettre (avec l'espacement choisi)
+    const largeurs = lignes.map((l) => {
+      const lettres = Array.from(l);
+      let w = 0;
+      for (const ch of lettres) w += ctx.measureText(ch).width + ecart;
+      return Math.max(0, w - (lettres.length ? ecart : 0));
+    });
+    const largeurMax = Math.max(0, ...largeurs);
+    // Un peu de marge autour, pour les lettres qui dépassent (j, g, f…),
+    // pour le contour, et pour le bandeau.
+    const marge = c.taille * 0.2 + (c.contour.actif ? c.contour.epaisseur * c.taille : 0) + (bandeau ? c.taille * 0.3 : 0);
+    let largeur = Math.max(c.taille * 0.5, largeurMax) + marge * 2;
+    let hauteur = lignes.length * interligne + marge * 2;
+    let arc = null;
+    if (courbure) {
+      // La ligne la plus longue occupe un morceau de cercle (jusqu'à 171°)
+      const angle = (Math.abs(courbure) / 100) * Math.PI * 0.95;
+      const rayon = Math.max(largeurMax, c.taille) / angle;
+      const corde = 2 * rayon * Math.sin(angle / 2);
+      const fleche = rayon * (1 - Math.cos(angle / 2));
+      largeur = Math.max(c.taille * 0.5, corde + c.taille) + marge * 2;
+      hauteur = lignes.length * interligne + fleche + marge * 2;
+      arc = { rayon, angle, fleche };
+    }
+    const mesure = { largeur, hauteur, lignes, largeurs, interligne, marge, arc, ecart };
     // On ne garde que les mesures récentes
     if (this._cacheMesures.size > 200) this._cacheMesures.clear();
     this._cacheMesures.set(cle, mesure);
@@ -133,11 +160,17 @@ const Rendu = {
     const m = this.mesurerTexte(c);
     ctx.font = Polices.css(c.police, c.taille, c.gras);
     ctx.textBaseline = 'middle';
-    let x;
-    if (c.alignement === 'gauche') { ctx.textAlign = 'left'; x = -m.largeur / 2 + m.marge; }
-    else if (c.alignement === 'droite') { ctx.textAlign = 'right'; x = m.largeur / 2 - m.marge; }
-    else { ctx.textAlign = 'center'; x = 0; }
-    const yDebut = -m.hauteur / 2 + m.marge + m.interligne / 2;
+
+    // 1. Le bandeau de couleur derrière le texte (sans ombre)
+    if (c.bandeau && c.bandeau.actif) {
+      ctx.save();
+      ctx.globalAlpha *= limiter(c.bandeau.opacite == null ? 1 : c.bandeau.opacite, 0, 1);
+      ctx.fillStyle = c.bandeau.couleur;
+      ctx.beginPath();
+      ctx.roundRect(-m.largeur / 2, -m.hauteur / 2, m.largeur, m.hauteur, Math.min(c.taille * 0.3, m.hauteur / 2));
+      ctx.fill();
+      ctx.restore();
+    }
 
     const avecContour = c.contour.actif && c.contour.epaisseur > 0;
     // Ombre : le flou et le décalage de l'ombre ne suivent pas le zoom de
@@ -160,24 +193,68 @@ const Rendu = {
         ctx.shadowOffsetY = 0;
       }
     };
-
-    m.lignes.forEach((ligne, i) => {
-      const y = yDebut + i * m.interligne;
+    // Peint un morceau de texte : le contour SOUS les lettres (sinon il
+    // les mange), puis les lettres.
+    const peindre = (texte, x, y) => {
       if (avecContour) {
-        // Le contour est dessiné SOUS les lettres (sinon il les mange)
         reglerOmbre(true);
         ctx.lineJoin = 'round';
         ctx.miterLimit = 2;
         ctx.lineWidth = c.contour.epaisseur * c.taille * 2;
         ctx.strokeStyle = c.contour.couleur;
-        ctx.strokeText(ligne, x, y);
+        ctx.strokeText(texte, x, y);
         reglerOmbre(false);
       } else {
         reglerOmbre(true);
       }
       ctx.fillStyle = c.couleur;
-      ctx.fillText(ligne, x, y);
-    });
+      ctx.fillText(texte, x, y);
+    };
+
+    // 2a. Texte en arc : chaque lettre est posée sur un cercle et tournée
+    if (m.arc) {
+      ctx.textAlign = 'center';
+      ctx.letterSpacing = '0px';
+      const n = m.lignes.length;
+      const haut = courbureVersLeHaut(c);
+      m.lignes.forEach((ligne, i) => {
+        // Arc vers le haut : le centre du cercle est dessous ; les lignes
+        // suivantes sont plus près du centre (rayon plus petit).
+        const yRef = haut
+          ? -m.hauteur / 2 + m.marge + m.interligne / 2 + i * m.interligne
+          : m.hauteur / 2 - m.marge - m.interligne / 2 - (n - 1 - i) * m.interligne;
+        const rayon = Math.max(c.taille, m.arc.rayon - (haut ? i : n - 1 - i) * m.interligne);
+        const centreY = haut ? yRef + rayon : yRef - rayon;
+        const lettres = Array.from(ligne);
+        const tailles = lettres.map((ch) => ctx.measureText(ch).width);
+        const total = tailles.reduce((a, b) => a + b, 0) + m.ecart * Math.max(0, lettres.length - 1);
+        let pos = 0;
+        lettres.forEach((ch, k) => {
+          const a = -total / rayon / 2 + (pos + tailles[k] / 2) / rayon;
+          ctx.save();
+          if (haut) { ctx.translate(rayon * Math.sin(a), centreY - rayon * Math.cos(a)); ctx.rotate(a); }
+          else { ctx.translate(rayon * Math.sin(a), centreY + rayon * Math.cos(a)); ctx.rotate(-a); }
+          peindre(ch, 0, 0);
+          ctx.restore();
+          pos += tailles[k] + m.ecart;
+        });
+      });
+      return;
+    }
+
+    // 2b. Texte droit
+    ctx.letterSpacing = m.ecart + 'px';
+    let x;
+    if (c.alignement === 'gauche') { ctx.textAlign = 'left'; x = -m.largeur / 2 + m.marge; }
+    else if (c.alignement === 'droite') { ctx.textAlign = 'right'; x = m.largeur / 2 - m.marge; }
+    else { ctx.textAlign = 'center'; x = 0; }
+    // L'espacement s'ajoute aussi après la dernière lettre : on le
+    // compense pour que le texte reste bien placé.
+    if (m.ecart && ctx.textAlign === 'center') x += m.ecart / 2;
+    if (m.ecart && ctx.textAlign === 'right') x += m.ecart;
+    const yDebut = -m.hauteur / 2 + m.marge + m.interligne / 2;
+    m.lignes.forEach((ligne, i) => peindre(ligne, x, yDebut + i * m.interligne));
+    ctx.letterSpacing = '0px';
   },
 
   /* Le damier gris qui montre les zones transparentes (à l'écran

@@ -36,6 +36,9 @@
 <script defer src="./flou.js"></script>
 <script defer src="./recadrage.js"></script>
 <script defer src="./guide.js"></script>
+<script defer src="./signature.js"></script>
+<script defer src="./collage.js"></script>
+<script defer src="./diagnostic.js"></script>
 <script defer src="./export.js"></script>
 <script defer src="./sauvegarde.js"></script>
 <script defer src="./montages.js"></script>
@@ -89,6 +92,10 @@
     <symbol id="i-tourner-g" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 4v4h4"/></g></symbol>
     <symbol id="i-tourner-d" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/></g></symbol>
     <symbol id="i-fichier" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5"/><path d="M12 11v7M9 15l3 3 3-3"/></g></symbol>
+    <symbol id="i-collage" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="8" height="18" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5" fill="currentColor" fill-opacity=".3"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></g></symbol>
+    <symbol id="i-signature" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-1 4-9 6-9s-1 9 1 9 2-4 4-4 1 3 3 3 2-2 4-2"/><path d="M3 21h18" opacity=".5"/></g></symbol>
+    <symbol id="i-verifier" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M9.5 12l2 2 3.5-4"/></g></symbol>
+    <symbol id="i-auto" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19l5-14h1l5 14"/><path d="M7 14h8"/><path d="M19 3l.6 1.4L21 5l-1.4.6L19 7l-.6-1.4L17 5l1.4-.6z" fill="currentColor" stroke-width="1"/></g></symbol>
     <symbol id="i-installer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 7v7M9 11l3 3 3-3"/></g></symbol>
   </defs>
 </svg>
@@ -126,6 +133,7 @@
       <p class="etiquette">Mes montages</p>
       <ul id="liste-montages" class="liste-montages"></ul>
       <p id="place-montages" class="aide"></p>
+      <button type="button" class="bouton large discret" data-action="sauver-tout"><svg class="icone" aria-hidden="true"><use href="#i-fichier"/></svg>Sauvegarder tous mes montages (un fichier)</button>
     </div>
 
     <div class="bloc">
@@ -136,6 +144,9 @@
       <button type="button" class="bouton large" data-action="ouvrir-camera">
         <svg class="icone" aria-hidden="true"><use href="#i-camera"/></svg>Prendre une photo
       </button>
+      <button type="button" class="bouton large" data-action="ouvrir-collage">
+        <svg class="icone" aria-hidden="true"><use href="#i-collage"/></svg>Faire un collage (2 à 9 photos)
+      </button>
       <button type="button" class="bouton large" data-action="ouvrir-toile">
         <svg class="icone" aria-hidden="true"><use href="#i-toile"/></svg>Commencer sur une toile vide
       </button>
@@ -145,9 +156,32 @@
       <p class="aide">Un fichier « .omniphoto » sert à passer un montage d'un appareil à l'autre (du téléphone à la tablette, par exemple).</p>
     </div>
 
+    <button type="button" class="bouton large discret" data-action="voir-verifier">
+      <svg class="icone" aria-hidden="true"><use href="#i-verifier"/></svg>Vérifier mon téléphone
+    </button>
     <button type="button" class="bouton large discret" data-action="voir-apropos">
       <svg class="icone" aria-hidden="true"><use href="#i-info"/></svg>À propos
     </button>
+  </div>
+</section>
+
+<!-- ======================= VÉRIFIER MON TÉLÉPHONE ======================= -->
+<section class="vue vue-etroite" data-vue="verifier" aria-labelledby="titre-verifier" hidden>
+  <header class="barre">
+    <button type="button" class="bouton retour" data-action="retour">← Retour</button>
+    <h1 id="titre-verifier" tabindex="-1">Vérifier mon téléphone</h1>
+  </header>
+  <div class="pile">
+    <div class="bloc">
+      <p>Ce que ton téléphone sait faire, et ce qui est prêt. Tout est mesuré dans le téléphone : rien n'est envoyé.</p>
+      <ul id="verif-liste" class="liste-verif"></ul>
+    </div>
+    <div class="bloc">
+      <p class="etiquette">Vitesse de l'intelligence artificielle</p>
+      <p class="aide">Un détourage d'essai, sur une petite image : pour savoir combien de temps patienter.</p>
+      <button type="button" class="bouton large" data-action="verif-vitesse"><svg class="icone" aria-hidden="true"><use href="#i-magie"/></svg>Tester la vitesse</button>
+      <p id="verif-vitesse-resultat" class="etat-outil" role="status"></p>
+    </div>
   </div>
 </section>
 
@@ -175,10 +209,12 @@
         <button type="button" class="onglet" role="tab" data-action="onglet" data-onglet="detourage">Détourage</button>
       </div>
       <div class="grille-outils quatre" data-groupe="ajouter">
+        <!-- (la 5e case, « Signature », passe à la ligne) -->
         <button type="button" class="bouton outil" data-action="ajouter-texte"><svg class="icone" aria-hidden="true"><use href="#i-texte"/></svg>Texte</button>
         <button type="button" class="bouton outil" data-action="ajouter-image"><svg class="icone" aria-hidden="true"><use href="#i-image"/></svg>Image</button>
         <button type="button" class="bouton outil" data-action="ajouter-forme"><svg class="icone" aria-hidden="true"><use href="#i-forme"/></svg>Forme</button>
         <button type="button" class="bouton outil" data-action="ouvrir-calques"><svg class="icone" aria-hidden="true"><use href="#i-calques"/></svg>Calques</button>
+        <button type="button" class="bouton outil" data-action="ajouter-signature"><svg class="icone" aria-hidden="true"><use href="#i-signature"/></svg>Signature</button>
       </div>
       <div class="grille-outils quatre" data-groupe="retoucher" hidden>
         <button type="button" class="bouton outil" data-action="outil-recadrage"><svg class="icone" aria-hidden="true"><use href="#i-recadrer"/></svg>Recadrer</button>
@@ -222,6 +258,7 @@
           <button type="button" class="bouton outil" data-action="reculer"><svg class="icone" aria-hidden="true"><use href="#i-arriere"/></svg>Reculer</button>
           <button type="button" class="bouton outil danger" data-action="supprimer"><svg class="icone" aria-hidden="true"><use href="#i-poubelle"/></svg>Supprimer</button>
         </div>
+        <button type="button" class="bouton large discret" data-action="enregistrer-signature"><svg class="icone" aria-hidden="true"><use href="#i-signature"/></svg>Enregistrer comme ma signature</button>
       </div>
       <!-- Les retouches d'une image : toujours là, même si l'image est verrouillée -->
       <div id="retouches-calque">
@@ -315,7 +352,7 @@
         <label class="choix"><input type="radio" name="rc-format" value="carre"><span>Carré</span></label>
         <label class="choix"><input type="radio" name="rc-format" value="portrait"><span>Portrait<small>4:5</small></span></label>
         <label class="choix"><input type="radio" name="rc-format" value="story"><span>Story<small>9:16</small></span></label>
-        <label class="choix"><input type="radio" name="rc-format" value="paysage"><span>Paysage<small>16:9</small></span></label>
+        <label class="choix"><input type="radio" name="rc-format" value="paysage"><span>Paysage<small>16:9, YouTube</small></span></label>
         <label class="choix"><input type="radio" name="rc-format" value="photo"><span>Photo<small>3:2</small></span></label>
       </fieldset>
       <div id="rc-zone-redresser">
@@ -336,6 +373,7 @@
         <button type="button" class="bouton petit principal" data-action="lumiere-terminer"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Terminé</button>
       </div>
       <p class="aide nom-cible"></p>
+      <button type="button" class="bouton large" data-action="lumiere-auto"><svg class="icone" aria-hidden="true"><use href="#i-auto"/></svg>Auto : corriger tout seul</button>
       <label class="curseur"><span>Luminosité</span><input type="range" id="lu-lumiere" min="-100" max="100" step="1" value="0"><output></output></label>
       <label class="curseur"><span>Contraste</span><input type="range" id="lu-contraste" min="-100" max="100" step="1" value="0"><output></output></label>
       <label class="curseur"><span>Couleurs</span><input type="range" id="lu-saturation" min="-100" max="100" step="1" value="0"><output></output></label>
@@ -442,6 +480,7 @@
          appareil</strong> : tes photos ne sont jamais envoyées ailleurs.</p>
       <p><strong>Application gratuite et sans publicité.</strong> Pas de compte, pas de pistage.
          Omni-Photo fonctionne sans connexion : tes photos restent sur ton appareil, rien n'est envoyé sur internet.</p>
+      <button type="button" class="bouton large" data-action="voir-verifier"><svg class="icone" aria-hidden="true"><use href="#i-verifier"/></svg>Vérifier mon téléphone</button>
       <button type="button" class="bouton large" data-action="revoir-guide"><svg class="icone" aria-hidden="true"><use href="#i-info"/></svg>Revoir le guide de la première fois</button>
     </div>
 
@@ -517,6 +556,7 @@
     <label class="choix"><input type="radio" name="f-format" value="1080x1350"><span>Portrait<small>1 080 × 1 350</small></span></label>
     <label class="choix"><input type="radio" name="f-format" value="1080x1920"><span>Story<small>1 080 × 1 920</small></span></label>
     <label class="choix"><input type="radio" name="f-format" value="1920x1080"><span>Paysage<small>1 920 × 1 080</small></span></label>
+    <label class="choix"><input type="radio" name="f-format" value="1280x720"><span>Miniature YouTube<small>1 280 × 720</small></span></label>
   </fieldset>
   <fieldset class="choix-groupe deux">
     <legend>Fond</legend>
@@ -548,6 +588,7 @@
   <label class="champ"><span>Ton texte (plusieurs lignes possibles)</span>
     <textarea id="t-texte" rows="2" autocomplete="off" spellcheck="true"></textarea>
   </label>
+  <p class="aide">Astuce : les émojis du clavier de ton téléphone marchent aussi 🙂</p>
 
   <fieldset class="choix-groupe">
     <legend>Police</legend>
@@ -565,6 +606,9 @@
     <label class="interrupteur"><input type="checkbox" id="t-gras"><span>Gras</span></label>
   </div>
 
+  <label class="curseur"><span>En arc</span><input type="range" id="t-courbure" min="-100" max="100" step="1" value="0"><output></output></label>
+  <label class="curseur"><span>Espacement</span><input type="range" id="t-espacement" min="-5" max="60" step="1" value="0"><output></output></label>
+
   <fieldset class="choix-groupe trois">
     <legend>Alignement</legend>
     <label class="choix"><input type="radio" name="t-align" value="gauche"><span>À gauche</span></label>
@@ -580,6 +624,17 @@
         <div class="nuancier" data-cible="t-contour-couleur"></div>
       </div>
       <label class="curseur"><span>Épaisseur</span><input type="range" id="t-contour-epaisseur" min="1" max="30" step="1"><output></output></label>
+    </div>
+  </div>
+
+  <div class="sous-bloc" id="zone-bandeau">
+    <label class="interrupteur"><input type="checkbox" id="t-bandeau"><span>Bandeau derrière le texte</span></label>
+    <div class="reglages-secondaires">
+      <div class="reglage-couleur">
+        <label class="champ-couleur"><span>Couleur</span><input type="color" id="t-bandeau-couleur"></label>
+        <div class="nuancier" data-cible="t-bandeau-couleur"></div>
+      </div>
+      <label class="curseur"><span>Opacité</span><input type="range" id="t-bandeau-opacite" min="10" max="100" step="5"><output></output></label>
     </div>
   </div>
 
@@ -643,6 +698,33 @@
   <div class="pile serree">
     <button type="button" class="bouton principal large" data-reponse="oui"><svg class="icone" aria-hidden="true"><use href="#i-export"/></svg>Télécharger</button>
     <button type="button" class="bouton large discret" data-reponse="non"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Plus tard</button>
+  </div>
+</dialog>
+
+<!-- Le collage (voir collage.js) -->
+<dialog id="fenetre-collage" class="fenetre" aria-labelledby="titre-collage">
+  <h2 id="titre-collage">Collage</h2>
+  <canvas id="co-apercu" class="apercu-collage" width="260" height="260" aria-label="Aperçu du collage"></canvas>
+  <fieldset class="choix-groupe quatre">
+    <legend>Disposition</legend>
+    <div id="co-dispositions" class="grille-choix"></div>
+  </fieldset>
+  <fieldset class="choix-groupe quatre">
+    <legend>Format</legend>
+    <label class="choix"><input type="radio" name="co-format" value="carre" checked><span>Carré</span></label>
+    <label class="choix"><input type="radio" name="co-format" value="portrait"><span>Portrait</span></label>
+    <label class="choix"><input type="radio" name="co-format" value="story"><span>Story</span></label>
+    <label class="choix"><input type="radio" name="co-format" value="paysage"><span>Paysage</span></label>
+  </fieldset>
+  <label class="curseur"><span>Marges</span><input type="range" id="co-marge" min="0" max="6" step="0.5" value="2"><output></output></label>
+  <label class="curseur"><span>Coins ronds</span><input type="range" id="co-arrondi" min="0" max="100" step="5" value="15"><output></output></label>
+  <div class="reglage-couleur">
+    <label class="champ-couleur"><span>Fond</span><input type="color" id="co-couleur" value="#ffffff"></label>
+    <div class="nuancier" data-cible="co-couleur"></div>
+  </div>
+  <div class="rangee fin">
+    <button type="button" class="bouton" data-action="fermer-fenetre"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Fermer</button>
+    <button type="button" class="bouton principal" data-action="creer-collage"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Créer le collage</button>
   </div>
 </dialog>
 
@@ -738,10 +820,11 @@
     <label class="choix"><input type="radio" name="e-format" value="jpg"><span>JPG<small>plus léger</small></span></label>
   </fieldset>
   <p class="aide" id="e-explication"></p>
-  <fieldset class="choix-groupe trois">
+  <fieldset class="choix-groupe deux">
     <legend>Taille</legend>
     <label class="choix"><input type="radio" name="e-taille" value="reelle" checked><span>Réelle<small></small></span></label>
     <label class="choix"><input type="radio" name="e-taille" value="2048"><span>Moyenne<small></small></span></label>
+    <label class="choix"><input type="radio" name="e-taille" value="1280"><span>YouTube<small></small></span></label>
     <label class="choix"><input type="radio" name="e-taille" value="1080"><span>Pour partager<small></small></span></label>
   </fieldset>
   <div id="zone-qualite" hidden>
@@ -762,6 +845,7 @@
 <input type="file" id="fichier-fond" accept="image/*" hidden>
 <!-- Pas de filtre de type : Android ne reconnaît pas toujours les « .omniphoto » -->
 <input type="file" id="fichier-montage" hidden>
+<input type="file" id="fichier-collage" accept="image/*" multiple hidden>
 
 <!-- Le guide de la première fois (voir guide.js) -->
 <div id="guide" class="guide" popover="manual" hidden role="dialog" aria-labelledby="guide-texte">

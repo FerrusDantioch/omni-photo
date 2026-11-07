@@ -13,7 +13,11 @@
    de la liste FICHIERS ci-dessous, en même temps que VERSION dans app.js.
    Sinon, les téléphones qui ont déjà ouvert l'application gardent
    l'ancienne version. */
-const CACHE = 'omni-photo-v4';
+const CACHE = 'omni-photo-v5';
+
+/* Les photos reçues du menu « Partager » d'Android, le temps que la page
+   les ouvre (version 1.2). */
+const CACHE_PARTAGE = 'omni-photo-partage';
 
 /* La réserve des fichiers de l'intelligence artificielle (19 à 45 Mo).
    Ils ne sont PAS téléchargés à l'installation, mais au premier
@@ -56,6 +60,9 @@ const FICHIERS = [
   './recadrage.js',
   './guide.js',
   './montages.js',
+  './signature.js',
+  './collage.js',
+  './diagnostic.js',
   './detourage-travail.js',
   './export.js',
   './sauvegarde.js',
@@ -107,7 +114,7 @@ self.addEventListener('install', (e) => {
       uniquement elles (voir PREFIXE plus haut). */
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
-    const anciens = (await caches.keys()).filter((k) => k.startsWith(PREFIXE) && k !== CACHE && k !== CACHE_IA);
+    const anciens = (await caches.keys()).filter((k) => k.startsWith(PREFIXE) && k !== CACHE && k !== CACHE_IA && k !== CACHE_PARTAGE);
     // La version 1.0 rangeait l'IA avec le reste : on la garde (pas besoin
     // de la retélécharger), dans la réserve de l'IA.
     const ia = await caches.open(CACHE_IA);
@@ -141,6 +148,27 @@ self.addEventListener('message', (e) => {
       déjà rangé. « ignoreSearch » : une adresse avec un « ? » trouve
       quand même sa page. */
 self.addEventListener('fetch', (e) => {
+  // Version 1.2 : des photos partagées depuis la galerie (menu « Partager »
+  // d'Android). Elles arrivent ici (voir « share_target » dans
+  // manifest.json) : on les range, puis on ouvre l'application.
+  if (e.request.method === 'POST' && new URL(e.request.url).pathname.endsWith('/partage')) {
+    e.respondWith((async () => {
+      try {
+        const donnees = await e.request.formData();
+        const fichiers = donnees.getAll('photos').filter((f) => f && f.size);
+        const c = await caches.open(CACHE_PARTAGE);
+        for (const k of await c.keys()) await c.delete(k);
+        let i = 0;
+        for (const f of fichiers.slice(0, 9)) {
+          await c.put(new URL('./partage/' + i++, self.registration.scope).href, new Response(f, {
+            headers: { 'Content-Type': f.type || 'image/jpeg', 'X-Nom': encodeURIComponent(f.name || 'photo') }
+          }));
+        }
+      } catch (err) { /* la page dira que rien n'est arrivé */ }
+      return Response.redirect(new URL('./index.html#partage', self.registration.scope).href, 303);
+    })());
+    return;
+  }
   if (e.request.method !== 'GET') return;
   // Seulement les fichiers d'Omni-Photo (pas les liens vers d'autres sites)
   if (!e.request.url.startsWith(self.registration.scope)) return;

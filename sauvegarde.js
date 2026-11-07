@@ -119,6 +119,7 @@ function nomParDefaut() {
 }
 
 const ENTETE_FICHIER = 'OMNIPHOTO-MONTAGE-1\n';
+const ENTETE_TOUT = 'OMNIPHOTO-TOUT-1\n';     // tous les montages (version 1.2)
 
 const Sauvegarde = {
   _minuteur: null,
@@ -182,7 +183,8 @@ const Sauvegarde = {
     const gardees = new Set();
     for (const m of await Base.tout('montages')) for (const rid of m.ressources || []) gardees.add(rid);
     for (const rid of await Base.cles('images')) {
-      if (!gardees.has(rid)) {
+      // (l'image de « Ma signature » n'appartient à aucun montage : on la garde)
+      if (!gardees.has(rid) && !String(rid).startsWith('signature')) {
         await Base.effacer('images', rid);
         this._rangees.delete(rid);
       }
@@ -287,40 +289,67 @@ const Sauvegarde = {
     if (Montage.id === id) await this.maintenant();
     const m = await Base.lire('montages', id);
     if (!m) throw new Error('absent');
+    const { fichiers, morceaux } = await this._imagesPourFichier(m.ressources || []);
+    return this._fabriquerFichier(ENTETE_FICHIER, {
+      format: 1, application: 'Omni-Photo', version: VERSION, date: new Date().toISOString(),
+      nom: m.nom, doc: JSON.parse(m.doc), fichiers
+    }, morceaux);
+  },
+
+  /* Version 1.2 : TOUS les montages dans un seul fichier (pour changer de
+     téléphone sans rien perdre). Une image partagée n'y est mise qu'une fois. */
+  async versFichierTout() {
+    if (Montage.doc) await this.maintenant();
+    const tous = (await Base.tout('montages')).sort((a, b) => a.date - b.date);
+    if (!tous.length) throw new Error('aucun');
+    const ids = new Set();
+    for (const m of tous) for (const rid of m.ressources || []) ids.add(rid);
+    const { fichiers, morceaux } = await this._imagesPourFichier([...ids]);
+    return this._fabriquerFichier(ENTETE_TOUT, {
+      format: 1, application: 'Omni-Photo', version: VERSION, date: new Date().toISOString(),
+      montages: tous.map((m) => ({ nom: m.nom, date: m.date, doc: JSON.parse(m.doc) })), fichiers
+    }, morceaux);
+  },
+
+  async _imagesPourFichier(ids) {
     const morceaux = [], fichiers = [];
-    for (const rid of m.ressources || []) {
+    for (const rid of ids) {
       const im = await Base.lire('images', rid);
       if (!im || !im.blob) continue;
       fichiers.push({ id: rid, taille: im.blob.size, type: im.blob.type, maxCote: im.maxCote === Infinity ? null : im.maxCote });
       morceaux.push(im.blob);
     }
-    const description = JSON.stringify({
-      format: 1, application: 'Omni-Photo', version: VERSION, date: new Date().toISOString(),
-      nom: m.nom, doc: JSON.parse(m.doc), fichiers
-    });
-    const texte = new TextEncoder().encode(description);
-    const longueur = new Uint8Array(4);
-    new DataView(longueur.buffer).setUint32(0, texte.length, true);
-    return new Blob([ENTETE_FICHIER, longueur, texte, ...morceaux], { type: 'application/octet-stream' });
+    return { fichiers, morceaux };
   },
 
-  /* Lit un fichier « .omniphoto » et en fait un nouveau montage.
-     Renvoie son numéro. */
+  _fabriquerFichier(entete, description, morceaux) {
+    const texte = new TextEncoder().encode(JSON.stringify(description));
+    const longueur = new Uint8Array(4);
+    new DataView(longueur.buffer).setUint32(0, texte.length, true);
+    return new Blob([entete, longueur, texte, ...morceaux], { type: 'application/octet-stream' });
+  },
+
+  /* Lit un fichier « .omniphoto » (un montage, ou tous les montages) et
+     ajoute ce qu'il contient à « Mes montages ». Renvoie la liste des
+     nouveaux numéros. */
   async depuisFichier(fichier) {
     const pasBon = new Error('Ce fichier n\'est pas une sauvegarde Omni-Photo (fichier « .omniphoto »).');
-    const debut = new TextDecoder().decode(await fichier.slice(0, ENTETE_FICHIER.length).arrayBuffer());
-    if (debut !== ENTETE_FICHIER) throw pasBon;
-    const lg = new DataView(await fichier.slice(ENTETE_FICHIER.length, ENTETE_FICHIER.length + 4).arrayBuffer()).getUint32(0, true);
+    const debut = new TextDecoder().decode(await fichier.slice(0, 24).arrayBuffer());
+    const entete = [ENTETE_FICHIER, ENTETE_TOUT].find((e) => debut.startsWith(e));
+    if (!entete) throw pasBon;
+    const lg = new DataView(await fichier.slice(entete.length, entete.length + 4).arrayBuffer()).getUint32(0, true);
     let description;
     try {
-      const debutJson = ENTETE_FICHIER.length + 4;
+      const debutJson = entete.length + 4;
       description = JSON.parse(new TextDecoder().decode(await fichier.slice(debutJson, debutJson + lg).arrayBuffer()));
     } catch (e) { throw pasBon; }
-    if (!description || !description.doc || !Array.isArray(description.fichiers)) throw pasBon;
+    const montages = entete === ENTETE_TOUT ? description && description.montages
+      : description && description.doc && [{ nom: description.nom, doc: description.doc }];
+    if (!Array.isArray(montages) || !Array.isArray(description.fichiers)) throw pasBon;
     // De NOUVEAUX numéros pour chaque image : importer deux fois le même
     // fichier ne mélange jamais deux montages.
     const nouveaux = new Map();
-    let position = ENTETE_FICHIER.length + 4 + lg;
+    let position = entete.length + 4 + lg;
     for (const f of description.fichiers) {
       const blob = fichier.slice(position, position + f.taille, f.type || 'image/png');
       position += f.taille;
@@ -331,17 +360,21 @@ const Sauvegarde = {
       await Base.ecrire('images', rid, { blob: new Blob([await blob.arrayBuffer()], { type: blob.type }), maxCote: f.maxCote || Infinity });
       this._rangees.add(rid);
     }
-    const doc = description.doc;
-    for (const c of doc.calques || []) {
-      if (c.ressource) c.ressource = nouveaux.get(c.ressource) || c.ressource;
-      if (c.source) c.source = nouveaux.get(c.source) || c.source;
+    const ajoutes = [];
+    for (const m of montages) {
+      const doc = m.doc;
+      for (const c of doc.calques || []) {
+        if (c.ressource) c.ressource = nouveaux.get(c.ressource) || c.ressource;
+        if (c.source) c.source = nouveaux.get(c.source) || c.source;
+      }
+      const id = nouvelId('m');
+      await Base.ecrire('montages', id, {
+        id, nom: m.nom || 'Montage importé', date: Date.now() - (montages.length - ajoutes.length), doc: JSON.stringify(doc),
+        ressources: [...idsDuDoc(doc)], miniature: null
+      });
+      ajoutes.push(id);
     }
-    const id = nouvelId('m');
-    await Base.ecrire('montages', id, {
-      id, nom: description.nom || 'Montage importé', date: Date.now(), doc: JSON.stringify(doc),
-      ressources: [...idsDuDoc(doc)], miniature: null
-    });
-    return id;
+    return ajoutes;
   }
 };
 

@@ -10,7 +10,7 @@
 
 /* ⚠️ Numéro de version, affiché dans « À propos ». À changer à chaque
    version publiée, EN MÊME TEMPS que CACHE en haut de sw.js. */
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 
 
 /* ---------- 1. Les écrans ---------- */
@@ -113,6 +113,10 @@ const ACTIONS = {
   'correcteur-retirer': () => OutilCorrecteur.retirerDernier(),
   'correcteur-valider': () => OutilCorrecteur.valider(),
   'correcteur-source': () => OutilCorrecteur.choisirAutreSource(),
+  'outil-cacher': () => Retouche.ouvrir(OutilCacher),
+  'cacher-comparer': () => OutilCacher.basculerComparaison(),
+  'cacher-retirer': () => OutilCacher.retirerDernier(),
+  'cacher-valider': () => OutilCacher.valider(),
   'ouvrir-modeles': () => Modeles.ouvrir(),
   'modele-choisir': (b) => Modeles.choisir(b.dataset.id),
   'modele-photo': () => choisirFichier('#fichier-modele'),
@@ -155,6 +159,10 @@ const ACTIONS = {
   'ouvrir-export': () => { if (Retouche.verifierLibre()) Export.ouvrir(); },
   'enregistrer': () => Export.enregistrer(),
   'partager': () => Export.partager(),
+  'ouvrir-impression': () => Impression.ouvrir(),
+  'imprimer': () => Impression.imprimer(),
+  'imprimer-pdf': () => Impression.enregistrerPDF(),
+  'partager-pdf': () => Impression.partagerPDF(),
 
   // Éditeur : outils
   'onglet': (b) => Panneaux.choisirOnglet(b.dataset.onglet),
@@ -425,6 +433,7 @@ async function demarrer() {
   Editeur.initialiser();
   Panneaux.initialiser();
   Export.initialiser();
+  Impression.initialiser();
   FenetreEffets.initialiser();
   FenetreForme.initialiser();
   Installation.initialiser();
@@ -441,6 +450,8 @@ async function demarrer() {
   $('#fichier-modele').addEventListener('change', (e) => { if (e.target.files[0]) Modeles.creer(e.target.files[0]); });
   $('#cr-taille').addEventListener('input', () => OutilCorrecteur.montrerReglage());
   $('#outil-correcteur').addEventListener('change', () => { if (Editeur.outil === OutilCorrecteur) OutilCorrecteur._maj(); });
+  $('#outil-cacher').addEventListener('input', (e) => { if (Editeur.outil === OutilCacher) OutilCacher.reglageChange(e); });
+  $('#outil-cacher').addEventListener('change', (e) => { if (Editeur.outil === OutilCacher) OutilCacher.reglageChange(e); });
   $('#fenetre-nom').addEventListener('submit', (e) => { e.preventDefault(); Accueil.validerNom(); });
 
   // Nouveaux outils de la version 1.1

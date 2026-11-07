@@ -1622,6 +1622,212 @@ lancer('Omni-Photo', async () => {
     await t.ctx.close();
   });
 
+  await section('Cacher une partie de la photo (pixels, flou)', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    // Un mur uni, un « visage » en damier très fin, une « plaque » rayée
+    const photo = Buffer.from(await p.evaluate(async () => {
+      const c = document.createElement('canvas'); c.width = 600; c.height = 400; const x = c.getContext('2d');
+      x.fillStyle = '#8899aa'; x.fillRect(0, 0, 600, 400);
+      for (let i = 0; i < 30; i++) for (let j = 0; j < 30; j++) { x.fillStyle = (i + j) % 2 ? '#ffffff' : '#000000'; x.fillRect(240 + i * 4, 140 + j * 4, 4, 4); }
+      for (let i = 0; i < 25; i++) { x.fillStyle = i % 2 ? '#ffee00' : '#cc0000'; x.fillRect(60 + i * 4, 300, 4, 50); }
+      const b = await new Promise((ok) => c.toBlob(ok, 'image/png'));
+      return [...new Uint8Array(await b.arrayBuffer())];
+    }));
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'rue.png', mimeType: 'image/png', buffer: photo });
+    await attendreFin(p);
+    const calque = (await etat(p)).doc.calques[0];
+    // Deux points du même carré de pixels (celui qui contient x, y) pour une zone
+    const memeCarre = async (n, x, y) => {
+      const k = await p.evaluate(({ n }) => OutilCacher.taille(OutilCacher.zones[n], 600, 400, 'pixels'), { n });
+      const x0 = Math.floor(x / k) * k, y0 = Math.floor(y / k) * k;
+      return [[x0, y0], [Math.min(599, x0 + k - 1), Math.min(399, y0 + k - 1)], k];
+    };
+    await toucherOutil(p, 'outil-cacher');
+    verifier(await p.evaluate(() => Editeur.outil === OutilCacher && !document.querySelector('#outil-cacher').hidden), 'l’outil « Cacher » s’ouvre (onglet « Retoucher »)');
+    verifier(await p.$eval('[data-action="cacher-valider"]', (b) => b.disabled), 'rien à valider au départ');
+    // Un simple toucher : il faut glisser
+    const centre = await versEcran(p, 300, 200);
+    await doigts(p, [['pointerdown', 1, centre.x, centre.y], ['pointerup', 1, centre.x, centre.y]]);
+    await attendre(p, 100);
+    verifier((await texte(p, '#message-texte')).includes('Fais glisser') && await p.evaluate(() => OutilCacher.zones.length === 0), 'un simple toucher explique qu’il faut glisser');
+    const f1 = await versEcran(p, 100, 100), f2 = await versEcran(p, 200, 101);
+    await p.click('[data-action="fermer-message"]');
+    await doigts(p, [['pointerdown', 1, f1.x, f1.y], ['pointermove', 1, f2.x, f2.y], ['pointerup', 1, f2.x, f2.y]]);
+    await attendre(p, 100);
+    verifier((await texte(p, '#message-texte')).includes('diagonale') && await p.evaluate(() => OutilCacher.zones.length === 0), 'un rectangle tout plat est refusé, avec une explication');
+    // Un rectangle sur le « visage »
+    const a = await versEcran(p, 232, 132), b = await versEcran(p, 368, 268), m = await versEcran(p, 300, 200);
+    await doigts(p, [['pointerdown', 1, a.x, a.y], ['pointermove', 1, m.x, m.y], ['pointermove', 1, b.x, b.y], ['pointerup', 1, b.x, b.y]]);
+    verifier(await p.evaluate(() => OutilCacher.zones.length === 1), 'une zone tracée');
+    let [[ax, ay], [bx, by], k] = await memeCarre(0, 300, 200);
+    verifier(k >= 18 && k <= 26, 'à la force 5, la zone est couverte par environ 6 carrés', k);
+    let px = await pixel(p, calque.ressource, ax, ay, true);
+    let px2 = await pixel(p, calque.ressource, bx, by, true);
+    verifier(px.join() === px2.join() && px[0] > 50 && px[0] < 210, 'pixels : le damier devient un carré uni', [px, px2]);
+    [[ax, ay], [bx, by]] = await memeCarre(0, 241, 141);
+    const coin = await pixel(p, calque.ressource, ax, ay, true), coin2 = await pixel(p, calque.ressource, bx, by, true);
+    verifier(coin.join() === coin2.join(), 'même tout au bord de la zone, rien ne se devine', [coin, coin2]);
+    px = await pixel(p, calque.ressource, 100, 100, true);
+    verifier(Math.abs(px[0] - 0x88) < 3 && Math.abs(px[2] - 0xaa) < 3, 'le reste de la photo ne change pas', px);
+    px = await pixel(p, calque.ressource, 300, 200);
+    verifier(px[0] === 0 || px[0] === 255, 'la vraie image n’est pas encore touchée', px);
+    await p.click('[data-action="cacher-comparer"]');
+    verifier(await p.evaluate(() => Rendu.remplacements.size === 0), '« Voir l’original » compare');
+    await p.click('[data-action="cacher-comparer"]');
+    // Le flou, appliqué à la même zone
+    await p.click('label.choix:has(input[name="ca-effet"][value="flou"])');
+    await attendre(p, 100);
+    px = await pixel(p, calque.ressource, 300, 200, true);
+    px2 = await pixel(p, calque.ressource, 304, 200, true);
+    verifier(Math.abs(px[0] - px2[0]) < 20 && px[0] > 70 && px[0] < 190, 'flou : le damier devient un gris doux', [px, px2]);
+    await p.$eval('#ca-force', (r) => { r.value = 2; r.dispatchEvent(new Event('input', { bubbles: true })); r.dispatchEvent(new Event('change', { bubbles: true })); });
+    verifier((await texte(p, '#ca-etat')).includes('Attention'), 'un flou léger : on prévient qu’il peut laisser deviner');
+    await p.$eval('#ca-force', (r) => { r.value = 5; r.dispatchEvent(new Event('change', { bubbles: true })); });
+    await p.click('label.choix:has(input[name="ca-effet"][value="pixels"])');
+    // Au doigt, sur la « plaque »
+    await p.click('label.choix:has(input[name="ca-forme"][value="doigt"])');
+    verifier(!(await p.$eval('#ca-zone-taille', (z) => z.hidden)), 'au doigt : la taille du doigt se règle');
+    const d1 = await versEcran(p, 70, 325), d2 = await versEcran(p, 150, 325);
+    await doigts(p, [['pointerdown', 1, d1.x, d1.y], ['pointermove', 1, (d1.x + d2.x) / 2, d1.y], ['pointermove', 1, d2.x, d2.y], ['pointerup', 1, d2.x, d2.y]]);
+    [[ax, ay], [bx, by]] = await memeCarre(1, 100, 322);
+    px = await pixel(p, calque.ressource, ax, ay, true);
+    px2 = await pixel(p, calque.ressource, bx, by, true);
+    verifier(await p.evaluate(() => OutilCacher.zones.length === 2) && px.join() === px2.join(), 'au doigt : les rayures deviennent des carrés unis', [px, px2]);
+    // Un 2e doigt pendant le tracé : c'est un zoom, rien n'est ajouté
+    await p.click('label.choix:has(input[name="ca-forme"][value="rectangle"])');
+    const z1 = await versEcran(p, 400, 60);
+    await doigts(p, [['pointerdown', 1, z1.x, z1.y], ['pointermove', 1, z1.x + 40, z1.y + 30], ['pointerdown', 2, z1.x + 100, z1.y],
+      ['pointermove', 2, z1.x + 130, z1.y], ['pointerup', 2, z1.x + 130, z1.y], ['pointerup', 1, z1.x + 40, z1.y + 30]]);
+    verifier(await p.evaluate(() => OutilCacher.zones.length === 2), 'un 2e doigt annule la zone commencée (zoom)');
+    await p.click('[data-action="voir-tout"]');
+    await p.click('[data-action="cacher-retirer"]');
+    px = await pixel(p, calque.ressource, 100, 320, true);
+    verifier(await p.evaluate(() => OutilCacher.zones.length === 1) && (px[0] === 0xcc || px[1] === 0xee), '« Retirer le dernier » enlève la dernière zone', px);
+    await p.click('[data-action="cacher-valider"]');
+    let e = await etat(p);
+    const cachee = e.doc.calques[0].ressource;
+    verifier(cachee !== calque.ressource && e.passe === 1 && !(await p.evaluate(() => Editeur.outil)), 'valider : nouvelle image, une étape d’« Annuler »');
+    const carre = await p.evaluate(() => Math.round(136 / 6));
+    const x0 = Math.floor(300 / carre) * carre, y0 = Math.floor(200 / carre) * carre;
+    px = await pixel(p, cachee, x0, y0);
+    px2 = await pixel(p, cachee, x0 + 3, y0 + 3);
+    verifier(px.join() === px2.join() && px[0] > 50 && px[0] < 210, 'la zone est vraiment effacée de l’image', [px, px2]);
+    const ex = await exporterPixels(p, [[x0, y0], [x0 + 3, y0 + 3]]);
+    verifier(ex.pixels[0].join() === ex.pixels[1].join(), 'et dans l’image exportée', ex.pixels);
+    await p.click('[data-action="annuler"]');
+    verifier((await etat(p)).doc.calques[0].ressource === calque.ressource, '« Annuler » rend la photo d’origine');
+    // Un sujet détouré : son image d'origine est cachée aussi (sinon le
+    // pinceau « Restaurer » ferait revenir ce qui était caché)
+    await p.evaluate(() => {
+      const c = Montage.doc.calques[0];
+      const r = Ressources.obtenir(c.ressource);
+      const t = document.createElement('canvas'); t.width = r.largeur; t.height = r.hauteur;
+      t.getContext('2d').drawImage(r.image, 0, 0);
+      Montage.modifier(c.id, { source: Ressources.depuisToile(t) });
+    });
+    await toucherOutil(p, 'outil-cacher');
+    await p.click('[data-action="voir-tout"]');
+    const a2 = await versEcran(p, 232, 132), b2 = await versEcran(p, 368, 268);
+    await doigts(p, [['pointerdown', 1, a2.x, a2.y], ['pointermove', 1, b2.x, b2.y], ['pointerup', 1, b2.x, b2.y]]);
+    await p.click('[data-action="cacher-valider"]');
+    e = await etat(p);
+    px = await pixel(p, e.doc.calques[0].source, x0, y0);
+    px2 = await pixel(p, e.doc.calques[0].source, x0 + 3, y0 + 3);
+    verifier(px.join() === px2.join() && px[0] > 50 && px[0] < 210, 'sujet détouré : l’image d’origine est cachée aussi', [px, px2]);
+    // L'ovale
+    await toucherOutil(p, 'outil-cacher');
+    await p.click('label.choix:has(input[name="ca-forme"][value="ovale"])');
+    const o1 = await versEcran(p, 20, 20), o2 = await versEcran(p, 220, 120);
+    await doigts(p, [['pointerdown', 1, o1.x, o1.y], ['pointermove', 1, o2.x, o2.y], ['pointerup', 1, o2.x, o2.y]]);
+    verifier(await p.evaluate(() => OutilCacher.zones.length === 1 && OutilCacher.zones[0].points.length === 48), 'ovale : une zone ronde');
+    await t.ctx.close();
+  });
+
+  await section('Imprimer et PDF', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    // La mise en page (en millimètres)
+    const mp = await p.evaluate(() => ({
+      carre: miseEnPage('10x15', 1, 1, { marge: true }),
+      carreRempli: miseEnPage('10x15', 1, 1, { marge: true, remplir: true }),
+      deux: miseEnPage('a4', 2, 1.5, { marge: true }),
+      neuf: miseEnPage('a4', 9, 1, { marge: false })
+    }));
+    const im = mp.carre.images[0];
+    verifier(!mp.carre.paysage && Math.abs(im.l - 90) < 0.01 && Math.abs(im.h - 90) < 0.01 && Math.abs(im.y - 30) < 0.01, 'mise en page : une image carrée, entière, centrée sur 10 × 15', im);
+    const imr = mp.carreRempli.images[0];
+    verifier(Math.abs(imr.l - 140) < 0.01 && Math.abs(mp.carreRempli.cases[0].h - 140) < 0.01, '« Remplir » : l’image couvre toute la case', imr);
+    verifier(!mp.deux.paysage && mp.deux.cases.length === 2 && mp.deux.cases[1].y > mp.deux.cases[0].y && Math.abs(mp.deux.images[0].l - 200) < 0.01,
+      '2 exemplaires sur A4 : l’un sous l’autre, aussi grands que possible', mp.deux.cases);
+    verifier(mp.neuf.cases.length === 9 && Math.abs(mp.neuf.cases[0].x) < 0.01, '9 exemplaires sans marge', mp.neuf.cases[0]);
+
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'souvenir.jpg', mimeType: 'image/jpeg', buffer: await fabriquerImage(p, 1200, 800) });
+    await attendreFin(p);
+    await p.click('[data-action="ouvrir-export"]');
+    await p.click('[data-action="ouvrir-impression"]');
+    await attendre(p, 200);
+    verifier(await p.evaluate(() => document.querySelector('#fenetre-impression').open && !document.querySelector('#fenetre-export').open), 'la fenêtre « Imprimer » s’ouvre depuis l’export');
+    let q = await texte(p, '#i-qualite');
+    const apercu = await p.$eval('#i-apercu', (c) => [c.width, c.height]);
+    verifier(q.includes('A4 (en largeur)') && q.includes('correcte') && apercu[0] > apercu[1], 'A4 : la feuille se met en largeur pour une photo en largeur ; qualité annoncée', [q, apercu]);
+    const dessine = await p.$eval('#i-apercu', (c) => { const d = c.getContext('2d').getImageData(c.width / 2, c.height / 2, 1, 1).data; return d[3] > 0; });
+    verifier(dessine, 'l’aperçu de la feuille est dessiné');
+    await p.click('label.choix:has(input[name="i-papier"][value="10x15"])');
+    q = await texte(p, '#i-qualite');
+    verifier(q.includes('10 × 15') && q.includes('bonne') && q.includes('13,5 × 9 cm'), '10 × 15 : la taille de l’image et la qualité suivent', q);
+    // Le PDF
+    const [tel] = await Promise.all([p.waitForEvent('download'), p.click('[data-action="imprimer-pdf"]')]);
+    const pdf = fs.readFileSync(await tel.path());
+    const txt = pdf.toString('latin1');
+    verifier(tel.suggestedFilename().endsWith('.pdf') && txt.startsWith('%PDF-1.4') && txt.trimEnd().endsWith('%%EOF'), 'un fichier PDF est enregistré', tel.suggestedFilename());
+    verifier(/\/MediaBox \[0 0 425\.20 283\.46\]/.test(txt), 'le PDF a la taille exacte d’une photo 10 × 15 (en largeur)', (txt.match(/\/MediaBox \[[^\]]*\]/) || [])[0]);
+    const debut = Number(txt.match(/startxref\n(\d+)/)[1]);
+    const table = txt.slice(debut).split('\n');
+    const positions = table.slice(3, 9).map((l) => Number(l.slice(0, 10)));
+    const bonnes = txt.slice(debut, debut + 4) === 'xref' && positions.every((o, i) => txt.startsWith(`${i + 1} 0 obj`, o));
+    verifier(bonnes, 'la table du PDF est juste (les lecteurs PDF s’y retrouvent)', positions);
+    const larg = Number(txt.match(/\/Width (\d+)/)[1]), haut = Number(txt.match(/\/Height (\d+)/)[1]);
+    const longueur = Number(txt.match(/\/DCTDecode \/Length (\d+)/)[1]);
+    const depart = txt.indexOf('stream\n', txt.indexOf('/DCTDecode')) + 7;
+    const jpeg = pdf.subarray(depart, depart + longueur).toString('base64');
+    const lu = await p.evaluate(async (b64) => {
+      const img = await createImageBitmap(await (await fetch('data:image/jpeg;base64,' + b64)).blob());
+      const c = new OffscreenCanvas(img.width, img.height); const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+      return { l: img.width, h: img.height, bord: [...x.getImageData(3, 3, 1, 1).data], milieu: [...x.getImageData(img.width / 2, img.height / 2, 1, 1).data] };
+    }, jpeg);
+    verifier(lu.l === larg && lu.h === haut && Math.abs(lu.l / lu.h - 1.5) < 0.01 && lu.l >= 885, 'l’image du PDF se lit (au moins 150 points par pouce)', [lu.l, lu.h]);
+    verifier(lu.bord[0] > 245 && lu.bord[1] > 245 && lu.milieu[3] === 255 && lu.milieu.slice(0, 3).some((v) => v < 230), 'la marge est blanche, la photo au milieu', lu);
+    verifier(!(await p.evaluate(() => document.querySelector('#fenetre-impression').open)), 'la fenêtre se ferme après l’enregistrement');
+    // Imprimer : l'impression du téléphone (ici simulée)
+    await p.evaluate(() => { window.__imprime = 0; window.print = () => { window.__imprime++; }; });
+    await p.click('[data-action="ouvrir-export"]');
+    await p.click('[data-action="ouvrir-impression"]');
+    verifier(await p.evaluate(() => document.querySelector('input[name="i-papier"][value="10x15"]').checked), 'le dernier papier choisi est retenu');
+    await p.click('[data-action="imprimer"]');
+    await p.waitForFunction(() => window.__imprime === 1);
+    const prep = await p.evaluate(() => ({ src: document.querySelector('#impression img').src, page: document.querySelector('#style-impression').textContent, ouverte: document.querySelector('#fenetre-impression').open }));
+    verifier(prep.src.startsWith('blob:') && prep.page.includes('size: 150mm 100mm') && !prep.ouverte, '« Imprimer… » prépare la feuille et ouvre l’impression', prep);
+    const imprime = await p.pdf({ preferCSSPageSize: true, printBackground: true });
+    const ti = imprime.toString('latin1');
+    const pages = (ti.match(/\/Type\s*\/Page\b/g) || []).length;
+    const boite = (ti.match(/\/MediaBox\s*\[\s*0 0 ([\d.]+) ([\d.]+)\s*\]/) || []).slice(1).map(Number);
+    verifier(pages === 1 && Math.abs(boite[0] - 425.2) < 1.5 && Math.abs(boite[1] - 283.46) < 1.5, 'à l’impression : une seule page, de la bonne taille, sans l’interface', [pages, boite]);
+    // Manque de mémoire : un message clair
+    await p.evaluate(() => { window.__toBlob = HTMLCanvasElement.prototype.toBlob; HTMLCanvasElement.prototype.toBlob = function (ok) { ok(null); }; });
+    await p.click('[data-action="ouvrir-export"]');
+    await p.click('[data-action="ouvrir-impression"]');
+    await p.click('label.choix:has(input[name="i-nombre"][value="4"])');
+    await p.click('[data-action="imprimer-pdf"]');
+    await attendre(p, 300);
+    verifier((await texte(p, '#message-texte')).includes('manque de mémoire') && !(await p.evaluate(() => document.querySelector('#fenetre-impression').open)),
+      'manque de mémoire : message clair, la fenêtre se ferme');
+    await p.evaluate(() => { HTMLCanvasElement.prototype.toBlob = window.__toBlob; });
+    await t.ctx.close();
+  });
+
   await section('Page « À propos »', async () => {
     await p.click('[data-action="accueil"]');
     await attendre(p, 300);

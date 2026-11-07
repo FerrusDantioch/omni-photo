@@ -78,7 +78,7 @@ const MODELES = [
     fond: { mode: 'degrade', couleur: '#e4572e', couleur2: '#f4d35e', direction: 'horizontal' },
     photo: { rx: 0.73, ry: 0.5, rl: 0.5, rh: 0.92, arrondi: 0.08 },
     calques: [
-      texteModele('TITRE\nACCROCHEUR', 0.27, 0.42, { taille: 0.17, police: 'luckiest-guy', alignement: 'gauche', contour: { actif: true, couleur: '#14111d', epaisseur: 0.1 } }),
+      texteModele('TITRE\nACCROCHEUR', 0.27, 0.42, { taille: 0.13, police: 'luckiest-guy', alignement: 'gauche', contour: { actif: true, couleur: '#14111d', epaisseur: 0.1 } }),
       formeModele('fleche', 0.47, 0.8, 0.2, 0.12, { couleur: '#ffffff', trait: '#14111d', epaisseur: 0.08, rotation: -20 })
     ]
   },
@@ -137,6 +137,12 @@ const Modeles = {
       if (c.type === 'texte') {
         c.nom = 'Texte';
         c.taille = Math.max(8, Math.round(m.taille * petit));
+        // Un texte trop large pour l'image (police plus large que prévu…)
+        // est réduit, puis gardé dans l'image avec une petite marge.
+        const largeur = Rendu.mesurerTexte(c).largeur;
+        if (largeur > L * 0.94) c.taille = Math.max(8, Math.floor(c.taille * (L * 0.94) / largeur));
+        const demi = Rendu.mesurerTexte(c).largeur / 2;
+        c.x = limiter(c.x, Math.min(L / 2, demi + L * 0.03), Math.max(L / 2, L - demi - L * 0.03));
       } else if (c.type === 'forme') {
         c.nom = 'Forme';
         if (c.forme === 'cadre') { c.largeur = L; c.hauteur = H; c.x = L / 2; c.y = H / 2; }

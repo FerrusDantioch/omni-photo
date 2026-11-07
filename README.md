@@ -13,7 +13,7 @@ Application de l'Omni-système, par Ferrus Dantioch.
 
 ## Ce que fait l'application
 
-État actuel : **version 1.1.0** (les trois étapes du plan, puis 11 améliorations).
+État actuel : **version 1.2.0** (les trois étapes du plan, puis deux séries de 11 améliorations).
 
 | Fonction | État |
 |---|---|
@@ -42,6 +42,16 @@ Application de l'Omni-système, par Ferrus Dantioch.
 | **1.1** IA téléchargée seulement au premier détourage (installation : 1 Mo au lieu de 20) | ✅ |
 | **1.1** Formes : flèche, rectangle, rond, bulle, étoile, cœur, cadre | ✅ |
 | **1.1** Fichier « .omniphoto » pour passer un montage du téléphone à la tablette | ✅ |
+| **1.2** Ouvrir une photo depuis le menu « Partager » d'Android (application installée) ; plusieurs photos = un collage | ✅ |
+| **1.2** Collage : 2 à 9 photos, plusieurs dispositions, marges, coins ronds, couleur du fond | ✅ |
+| **1.2** Écran « Vérifier mon téléphone » (hors ligne, mémoire, IA, place…) et test de vitesse de l'IA | ✅ |
+| **1.2** Bouton « Auto » dans Lumière | ✅ |
+| **1.2** « Ma signature » : un texte ou un logo ajouté en un toucher sur chaque montage | ✅ |
+| **1.2** Format « Miniature YouTube » (toile 1 280 × 720, export « YouTube ») | ✅ |
+| **1.2** Texte en arc, bandeau derrière le texte, espacement des lettres (et les émojis du clavier) | ✅ |
+| **1.2** Sauvegarder tous les montages dans un seul fichier | ✅ |
+| **1.2** Correcteur : effacer un petit défaut, ou recopier une zone (tampon) | ✅ |
+| **1.2** Modèles tout prêts : anniversaire, invitation, grande nouvelle, miniature YouTube, souvenir, citation | ✅ |
 
 Les très grandes photos sont réduites à 4 096 pixels de côté pour rester
 fluides sur un téléphone milieu de gamme (un message le signale).
@@ -95,6 +105,14 @@ ouvrir l'adresse dans **Google Chrome** sur le téléphone :
 14. Pour vérifier le hors ligne : mettez le téléphone en mode avion, puis
     rouvrez Omni-Photo et essayez « Détourer ».
 
+## Le menu « Partager » d'Android
+
+Une fois Omni-Photo **installée** sur le téléphone, elle apparaît dans le menu
+« Partager » de la galerie : choisissez une photo, touchez « Partager », puis
+« Omni-Photo ». Avec plusieurs photos, Omni-Photo propose un collage.
+(Si elle n'apparaît pas tout de suite, redémarrez le téléphone une fois après
+l'installation.)
+
 ## Publier sur GitHub Pages
 
 1. Sur github.com, ouvrez le dépôt **omni-photo**.
@@ -132,6 +150,11 @@ Tous les fichiers sont à la racine (plus simple à envoyer depuis un téléphon
 | `formes.js` | les formes (flèche, bulle, cadre…) |
 | `montages.js` | l'accueil : « Mes montages » et les fichiers « .omniphoto » |
 | `guide.js` | le guide de la première fois |
+| `collage.js` | le collage |
+| `modeles.js` | les modèles tout prêts |
+| `correcteur.js` | le correcteur (effacer un défaut, copier une zone) |
+| `signature.js` | « Ma signature » |
+| `diagnostic.js` | l'écran « Vérifier mon téléphone » |
 | `modnet.onnx` | le modèle d'IA MODNet, mode « Une personne » (licence Apache 2.0) |
 | `ort.wasm.bundle.min.mjs`, `ort-wasm-simd-threaded.wasm` | le moteur ONNX Runtime Web (licence MIT) |
 | `u2netp.onnx` | le modèle d'IA U²-Netp (licence Apache 2.0) |
@@ -147,7 +170,7 @@ Tous les fichiers sont à la racine (plus simple à envoyer depuis un téléphon
 ## Tests automatiques (sur ordinateur)
 
 Ils ouvrent l'application dans un vrai navigateur qui imite un téléphone, puis
-une tablette, et vérifient 242 points : ouverture de photos, textes,
+une tablette, et vérifient environ 300 points : ouverture de photos, textes,
 gestes, annuler, export, sauvegarde, hors ligne, messages d'erreur…
 
 ```bash

@@ -13,6 +13,10 @@ Web, choisis par l'auteur), retouche pinceau/gomme, nouvel arrière-plan ✅ (1.
 Puis 1.1.0 : les 11 suggestions (recadrer, lumière, flou du fond, autocollant,
 MODNet, « Mes montages », taille d'export, guide, IA à la demande, formes,
 fichier .omniphoto), demandées toutes ensemble par l'auteur.
+Puis 1.2.0 : 11 autres suggestions (partage Android, collage, « Vérifier mon
+téléphone », bouton Auto, signature, format YouTube, texte en arc / bandeau /
+espacement, sauvegarde de tout, astuce émojis, puis les deux plus ambitieuses
+en dernier : correcteur et modèles tout prêts).
 
 ## ⚠️ Contraintes à préserver
 
@@ -53,7 +57,7 @@ fichier .omniphoto), demandées toutes ensemble par l'auteur.
   autrement à l'export).
 - `Editeur.outil` : `OutilYeux`, `OutilDecoupe`, `OutilPinceau`
   (retouches.js), `OutilIA` (ia.js), `OutilRecadrage`, `OutilLumiere`,
-  `OutilFlou`. Interface : `panneau` (id du `.panneau-outil`), `commencer(c)`,
+  `OutilFlou`, `OutilCorrecteur`. Interface : `panneau` (id du `.panneau-outil`), `commencer(c)`,
   `appui(p)` → vrai si l'outil prend le doigt (sinon le doigt déplace la vue),
   `mouvement`, `relache`, `interrompre` (2e doigt = zoom, trait oublié),
   `toucher(p)` (simple toucher), `dessiner(ctx)` (pixels d'écran),
@@ -75,7 +79,7 @@ fichier .omniphoto), demandées toutes ensemble par l'auteur.
   min-max ; filtre guidé (rayon ≈ côté/170, eps 0,002) sur un guide ≤ 1 024 px ;
   masque appliqué à la photo en taille réelle. Barre de progression :
   `Patience.montrer(t, { progression, arreter })` / `avancer()` ; durée du
-  dernier calcul dans `omniphoto-duree-ia`. `Detourage.arreter()` (même avant
+  dernier calcul dans `omniphoto-duree-ia-<modèle>`. `Detourage.arreter()` (même avant
   le démarrage du calcul : `_arretDemande`). Erreurs : `ErreurIA` + `MESSAGES_IA`.
 - `calque.source` = image d'origine d'un sujet détouré (IA, découpe, pinceau :
   `Retouche.valider(c, toile, { garderSource: true })`). Le pinceau
@@ -123,8 +127,32 @@ fichier .omniphoto), demandées toutes ensemble par l'auteur.
     (`sansGuide`) sauf la section qui le teste.
 - Limites (`LIMITES`) : photo 4 096 px de côté, calque 2 048 px, 200 Mo,
   270 Mpx. Erreurs lisibles : `ErreurPhoto` + `MESSAGES_PHOTO`.
-- Sauvegarde auto (`sauvegarde.js`) : tiroir `etat` (clé `courant`) + tiroir
-  `images` (fichier d'origine ou PNG, clé = numéro de ressource).
+- Sauvegarde auto (`sauvegarde.js`) : voir « Mes montages » ci-dessus
+  (tiroirs `montages` et `images` ; l'ancien tiroir `etat` n'existe plus
+  depuis la 1.1).
+- **Version 1.2** :
+  - Partage Android : `share_target` (manifeste, POST `./partage`, champ
+    `photos`) ; `sw.js` range les fichiers dans la réserve `omni-photo-partage`
+    (jamais supprimée par l'activation) puis redirige vers `#partage` ;
+    `Partage.recevoir()` (app.js) : 1 photo = montage, plusieurs = collage.
+  - Collage (collage.js) : cases en parts de 1, `dispositionsCollage(n)`,
+    images « cuites » à la taille de leur case (coins ronds) + calque `fond`.
+  - Modèles (modeles.js) : calques en proportions (`rx, ry, rl, rh`, taille
+    = part du petit côté) ; photo « cuite » dans sa zone (ronde ou à coins
+    ronds), sinon forme « Emplacement photo » ; texte trop large réduit.
+  - Correcteur (correcteur.js, `OutilCorrecteur`) : « effacer » = masque du
+    trait, épluchage du bord vers le centre + lissage + grain ; « copier » =
+    tampon depuis un instantané pris au début du trait. Appliqué aussi à
+    `source`. Opérations rejouées pour « Retirer le dernier ».
+  - Texte : `courbure` (-100 à 100, arc lettre par lettre), `espacement`
+    (fraction de la taille, `ctx.letterSpacing`), `bandeau { actif, couleur,
+    opacite }` ; tous facultatifs (anciens textes inchangés).
+  - Signature (signature.js) : localStorage `omniphoto-signature` (+ image
+    dans `images`, clé `signature`, épargnée par `_menage`).
+  - Fichier « tous les montages » : en-tête `OMNIPHOTO-TOUT-1\n`, relu par
+    le même `Sauvegarde.depuisFichier()` (qui renvoie une liste de numéros).
+  - Diagnostic (diagnostic.js) : vue `verifier` ; `etatHorsLigne()` (app.js).
+  - Lumière : `OutilLumiere.auto()` (histogramme d'une copie de 200 px).
 - Message et « Patiente » sont des `popover` (au-dessus des fenêtres) ; mais
   une fenêtre modale rend le reste inerte : fermer la fenêtre avant un message
   d'erreur qui demande « D'accord ».
@@ -137,7 +165,7 @@ fichier .omniphoto), demandées toutes ensemble par l'auteur.
 
 ## Tests
 
-`node tests/tester.js` (Playwright + Chromium ; 242 vérifications, dont le détourage hors ligne) ;
+`node tests/tester.js` (Playwright + Chromium ; environ 300 vérifications, dont le détourage hors ligne) ;
 `RAPIDE=1` saute les contrôles communs. `tests/outils.js` = boîte à outils
 commune à plusieurs applications de l'Omni-système.
 Servir le dossier parent pour reproduire l'adresse de GitHub Pages

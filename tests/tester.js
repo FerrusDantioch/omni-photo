@@ -1505,6 +1505,123 @@ lancer('Omni-Photo', async () => {
     await t.ctx.close();
   });
 
+
+  await section('Correcteur : effacer un défaut et copier une zone', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    // Un mur gris-bleu avec une tache sombre, et un carré rouge (pour « copier »)
+    const mur = Buffer.from(await p.evaluate(async () => {
+      const c = document.createElement('canvas'); c.width = 600; c.height = 400; const x = c.getContext('2d');
+      x.fillStyle = '#8899aa'; x.fillRect(0, 0, 600, 400);
+      x.fillStyle = '#111111'; x.beginPath(); x.arc(300, 200, 9, 0, 7); x.fill();
+      x.fillStyle = '#e4572e'; x.fillRect(70, 70, 60, 60);
+      const b = await new Promise((ok) => c.toBlob(ok, 'image/png'));
+      return [...new Uint8Array(await b.arrayBuffer())];
+    }));
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'mur.png', mimeType: 'image/png', buffer: mur });
+    await attendreFin(p);
+    const photo = (await etat(p)).doc.calques[0];
+    await toucherOutil(p, 'outil-correcteur');
+    verifier(await p.evaluate(() => Editeur.outil === OutilCorrecteur), 'le correcteur s’ouvre (onglet « Retoucher »)');
+    await p.evaluate(() => { const r = document.querySelector('#cr-taille'); r.value = 30; r.dispatchEvent(new Event('input', { bubbles: true })); });
+    const tache = await versEcran(p, 300, 200), tache2 = await versEcran(p, 304, 202);
+    const effacer = () => doigts(p, [['pointerdown', 1, tache.x, tache.y], ['pointermove', 1, tache2.x, tache2.y], ['pointerup', 1, tache2.x, tache2.y]]);
+    await effacer();
+    let px = await pixel(p, photo.ressource, 300, 200, true);
+    verifier(Math.abs(px[0] - 0x88) < 22 && Math.abs(px[2] - 0xaa) < 22, 'effacer : la tache disparaît, remplie par le mur autour', px);
+    px = await pixel(p, photo.ressource, 300, 200);
+    verifier(px[0] < 40, 'la vraie image n’est pas encore touchée', px);
+    await p.click('[data-action="correcteur-comparer"]');
+    verifier(await p.evaluate(() => Rendu.remplacements.size === 0), '« Voir l’original » compare');
+    await p.click('[data-action="correcteur-comparer"]');
+    await p.click('[data-action="correcteur-retirer"]');
+    verifier(await p.evaluate(() => OutilCorrecteur.operations.length === 0), '« Retirer le dernier » enlève la correction');
+    await effacer();
+    // Copier une zone : le carré rouge, recopié plus loin
+    await p.click('label.choix:has(input[name="cr-mode"][value="copier"])');
+    verifier((await texte(p, '#cr-etat')).includes('endroit à recopier'), 'copier : on demande d’abord l’endroit à recopier');
+    const source = await versEcran(p, 100, 100);
+    await doigts(p, [['pointerdown', 1, source.x, source.y], ['pointerup', 1, source.x, source.y]]);
+    verifier(await p.evaluate(() => !!OutilCorrecteur.pointSource && OutilCorrecteur.operations.length === 1), 'l’endroit à recopier est choisi (sans peindre)');
+    verifier(!(await p.$eval('[data-action="correcteur-source"]', (b) => b.hidden)), 'on peut choisir un autre endroit');
+    const cible = await versEcran(p, 450, 300), cible2 = await versEcran(p, 455, 302);
+    // Un 2e doigt pendant le trait : c'est un zoom, rien n'est peint
+    await doigts(p, [['pointerdown', 1, cible.x, cible.y], ['pointermove', 1, cible2.x, cible2.y], ['pointerdown', 2, cible.x + 90, cible.y],
+      ['pointermove', 2, cible.x + 120, cible.y], ['pointerup', 2, cible.x + 120, cible.y], ['pointerup', 1, cible2.x, cible2.y]]);
+    px = await pixel(p, photo.ressource, 450, 300, true);
+    verifier(Math.abs(px[0] - 0x88) < 10 && await p.evaluate(() => OutilCorrecteur.operations.length === 1), 'un 2e doigt annule le trait commencé', px);
+    await p.click('[data-action="voir-tout"]');
+    const c1 = await versEcran(p, 450, 300), c2 = await versEcran(p, 454, 302);
+    await doigts(p, [['pointerdown', 1, c1.x, c1.y], ['pointermove', 1, c2.x, c2.y], ['pointerup', 1, c2.x, c2.y]]);
+    px = await pixel(p, photo.ressource, 450, 300, true);
+    verifier(px[0] > 200 && px[1] < 120, 'copier : le rouge de la zone choisie apparaît sous le doigt', px);
+    await p.click('[data-action="correcteur-valider"]');
+    let e = await etat(p);
+    const corrigee = e.doc.calques[0].ressource;
+    verifier(corrigee !== photo.ressource && e.passe === 1 && !(await p.evaluate(() => Editeur.outil)), 'valider : nouvelle image, une étape d’« Annuler »');
+    px = await pixel(p, corrigee, 300, 200);
+    const px2 = await pixel(p, corrigee, 450, 300);
+    verifier(Math.abs(px[0] - 0x88) < 22 && px2[0] > 200, 'les deux corrections sont dans l’image', [px, px2]);
+    await p.click('[data-action="annuler"]');
+    verifier((await etat(p)).doc.calques[0].ressource === photo.ressource, '« Annuler » rend la photo d’origine');
+    await t.ctx.close();
+  });
+
+  await section('Modèles tout prêts', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await p.click('[data-action="ouvrir-modeles"]');
+    await p.waitForTimeout(600);
+    const cartes = await p.$$eval('#liste-modeles .carte-modele', (l) => l.map((b) => b.dataset.id));
+    verifier(cartes.length === 6, 'six modèles proposés', cartes);
+    const dessine = await p.$$eval('#liste-modeles canvas', (l) => l.every((c) => { const d = c.getContext('2d').getImageData(c.width / 2, c.height / 2, 1, 1).data; return d[3] > 0; }));
+    verifier(dessine, 'chaque modèle a son aperçu');
+    // Un modèle sans photo : directement dans l'éditeur
+    await p.click('.carte-modele[data-id="citation"]');
+    await attendreFin(p);
+    let e = await etat(p);
+    verifier(e.vue === 'editeur' && e.doc.largeur === 2048 && e.doc.calques[0].type === 'fond' && e.doc.calques.some((c) => c.texte === '— Ton nom'), 'modèle « Citation » : prêt dans l’éditeur');
+    // Toucher un texte du modèle, puis le modifier
+    const nom = e.doc.calques.find((c) => c.texte === '— Ton nom');
+    const m = await ecranDe(p, nom.id);
+    await doigts(p, [['pointerdown', 1, m.x, m.y], ['pointerup', 1, m.x, m.y]]);
+    verifier((await etat(p)).selection === nom.id, 'un texte du modèle se choisit d’un toucher');
+    await p.click('[data-action="modifier-texte"]');
+    await p.fill('#t-texte', '— Ferrus');
+    await p.click('#fenetre-texte [data-action="fermer-fenetre"]');
+    verifier((await etat(p)).doc.calques.some((c) => c.texte === '— Ferrus'), 'et se modifie comme les autres');
+    // Un modèle avec une photo ronde
+    await p.click('[data-action="accueil"]');
+    await p.click('[data-action="ouvrir-modeles"]');
+    await p.click('.carte-modele[data-id="anniversaire"]');
+    verifier(!(await p.$eval('#modele-etape-photo', (z) => z.hidden)) && (await texte(p, '#modele-nom')) === 'Anniversaire', 'on propose d’ajouter une photo');
+    await donnerFichier(p, '[data-action="modele-photo"]', { name: 'moi.jpg', mimeType: 'image/jpeg', buffer: await fabriquerImage(p, 900, 600) });
+    await attendreFin(p);
+    e = await etat(p);
+    const ph = e.doc.calques.find((c) => c.type === 'image');
+    verifier(e.vue === 'editeur' && ph && ph.largeur === 1024 && ph.hauteur === 1024, 'la photo prend la place prévue', ph && [ph.largeur, ph.hauteur]);
+    let px = await pixel(p, ph.ressource, 10, 10);
+    const px2 = await pixel(p, ph.ressource, 512, 512);
+    verifier(px[3] === 0 && px2[3] === 255, 'la photo est ronde (coins transparents)', [px, px2]);
+    verifier(e.doc.calques.some((c) => c.texte === 'Joyeux anniversaire !' && c.courbure === 30), 'le titre est en arc');
+    // Un modèle sans sa photo : une zone claire marque la place
+    await p.click('[data-action="accueil"]');
+    await p.click('[data-action="ouvrir-modeles"]');
+    await p.click('.carte-modele[data-id="youtube"]');
+    await p.click('[data-action="modele-sans-photo"]');
+    await attendreFin(p);
+    e = await etat(p);
+    verifier(e.doc.largeur === 1280 && e.doc.hauteur === 720 && e.doc.calques.some((c) => c.nom === 'Emplacement photo'), 'modèle « Miniature YouTube » sans photo : la place est marquée', [e.doc.largeur, e.doc.hauteur]);
+    verifier((await texte(p, '#message-texte')).includes('« Image »'), 'le message explique comment ajouter la photo');
+    const ex = await exporterPixels(p, [[5, 5], [640, 360]]);
+    verifier(ex.taille[0] === 1280 && ex.pixels.every((x) => x[3] === 255), 'le modèle s’exporte (1 280 × 720, sans trou)', ex.taille);
+    const liste = await (async () => { await p.click('[data-action="accueil"]'); await p.waitForTimeout(800); return p.$$eval('#liste-montages strong', (l) => l.map((x) => x.textContent)); })();
+    verifier(liste.some((n) => n.startsWith('Miniature YouTube — ')), 'le montage porte le nom du modèle', liste);
+    await t.ctx.close();
+  });
+
   await section('Page « À propos »', async () => {
     await p.click('[data-action="accueil"]');
     await attendre(p, 300);

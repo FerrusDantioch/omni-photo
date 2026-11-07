@@ -63,6 +63,8 @@ const FICHIERS = [
   './signature.js',
   './collage.js',
   './diagnostic.js',
+  './correcteur.js',
+  './modeles.js',
   './detourage-travail.js',
   './export.js',
   './sauvegarde.js',

@@ -39,6 +39,8 @@
 <script defer src="./signature.js"></script>
 <script defer src="./collage.js"></script>
 <script defer src="./diagnostic.js"></script>
+<script defer src="./correcteur.js"></script>
+<script defer src="./modeles.js"></script>
 <script defer src="./export.js"></script>
 <script defer src="./sauvegarde.js"></script>
 <script defer src="./montages.js"></script>
@@ -96,6 +98,8 @@
     <symbol id="i-signature" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-1 4-9 6-9s-1 9 1 9 2-4 4-4 1 3 3 3 2-2 4-2"/><path d="M3 21h18" opacity=".5"/></g></symbol>
     <symbol id="i-verifier" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M9.5 12l2 2 3.5-4"/></g></symbol>
     <symbol id="i-auto" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19l5-14h1l5 14"/><path d="M7 14h8"/><path d="M19 3l.6 1.4L21 5l-1.4.6L19 7l-.6-1.4L17 5l1.4-.6z" fill="currentColor" stroke-width="1"/></g></symbol>
+    <symbol id="i-correcteur" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6-9 9H5v-6z"/><path d="M11 7l6 6" opacity=".6"/><path d="M3 21h18"/></g></symbol>
+    <symbol id="i-modele" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h6" stroke-linecap="round"/><rect x="13" y="13" width="5" height="5" rx="1" fill="currentColor" fill-opacity=".35"/></g></symbol>
     <symbol id="i-installer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 7v7M9 11l3 3 3-3"/></g></symbol>
   </defs>
 </svg>
@@ -143,6 +147,9 @@
       </button>
       <button type="button" class="bouton large" data-action="ouvrir-camera">
         <svg class="icone" aria-hidden="true"><use href="#i-camera"/></svg>Prendre une photo
+      </button>
+      <button type="button" class="bouton large" data-action="ouvrir-modeles">
+        <svg class="icone" aria-hidden="true"><use href="#i-modele"/></svg>Commencer avec un modèle
       </button>
       <button type="button" class="bouton large" data-action="ouvrir-collage">
         <svg class="icone" aria-hidden="true"><use href="#i-collage"/></svg>Faire un collage (2 à 9 photos)
@@ -221,6 +228,7 @@
         <button type="button" class="bouton outil" data-action="outil-lumiere"><svg class="icone" aria-hidden="true"><use href="#i-lumiere"/></svg>Lumière</button>
         <button type="button" class="bouton outil" data-action="outil-yeux"><svg class="icone" aria-hidden="true"><use href="#i-yeux"/></svg>Yeux rouges</button>
         <button type="button" class="bouton outil" data-action="outil-decoupe"><svg class="icone" aria-hidden="true"><use href="#i-ciseaux"/></svg>Découper</button>
+        <button type="button" class="bouton outil" data-action="outil-correcteur"><svg class="icone" aria-hidden="true"><use href="#i-correcteur"/></svg>Correcteur</button>
       </div>
       <div class="grille-outils quatre" data-groupe="detourage" hidden>
         <button type="button" class="bouton outil" data-action="outil-ia"><svg class="icone" aria-hidden="true"><use href="#i-magie"/></svg>Détourer</button>
@@ -271,6 +279,7 @@
           <button type="button" class="bouton outil" data-action="outil-flou"><svg class="icone" aria-hidden="true"><use href="#i-flou"/></svg>Flou du fond</button>
           <button type="button" class="bouton outil" data-action="outil-yeux"><svg class="icone" aria-hidden="true"><use href="#i-yeux"/></svg>Yeux rouges</button>
           <button type="button" class="bouton outil" data-action="outil-decoupe"><svg class="icone" aria-hidden="true"><use href="#i-ciseaux"/></svg>Découper</button>
+          <button type="button" class="bouton outil" data-action="outil-correcteur"><svg class="icone" aria-hidden="true"><use href="#i-correcteur"/></svg>Correcteur</button>
         </div>
       </div>
     </div>
@@ -416,6 +425,29 @@
           <button type="button" class="bouton outil principal" data-action="flou-valider"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Valider</button>
         </div>
       </div>
+    </div>
+
+    <!-- Outil « Correcteur » (voir correcteur.js) -->
+    <div id="outil-correcteur" class="panneau-outil" hidden>
+      <div class="tete-calque">
+        <p class="nom-choisi">Correcteur</p>
+        <button type="button" class="bouton petit" data-action="outil-fermer"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Fermer</button>
+      </div>
+      <p class="aide nom-cible"></p>
+      <p id="cr-etat" class="etat-outil"></p>
+      <fieldset class="choix-groupe deux">
+        <legend>Comment ?</legend>
+        <label class="choix"><input type="radio" name="cr-mode" value="effacer" checked><span>Effacer un défaut<small>rempli avec ce qui l'entoure</small></span></label>
+        <label class="choix"><input type="radio" name="cr-mode" value="copier"><span>Copier une zone<small>recopie un endroit propre</small></span></label>
+      </fieldset>
+      <label class="curseur"><span>Taille</span><input type="range" id="cr-taille" min="6" max="100" step="1" value="24"><output></output></label>
+      <button type="button" class="bouton large discret" data-action="correcteur-source" hidden><svg class="icone" aria-hidden="true"><use href="#i-reprendre"/></svg>Choisir un autre endroit à recopier</button>
+      <div class="grille-outils trois">
+        <button type="button" class="bouton outil" data-action="correcteur-comparer"><svg class="icone" aria-hidden="true"><use href="#i-comparer"/></svg><span class="texte-bouton">Voir l'original</span></button>
+        <button type="button" class="bouton outil" data-action="correcteur-retirer"><svg class="icone" aria-hidden="true"><use href="#i-annuler"/></svg>Retirer le dernier</button>
+        <button type="button" class="bouton outil principal" data-action="correcteur-valider"><svg class="icone" aria-hidden="true"><use href="#i-valider"/></svg>Valider</button>
+      </div>
+      <p class="aide astuce">Zoome à deux doigts sur le défaut pour plus de précision. « Effacer » marche le mieux sur un fond assez uni (peau, ciel, mur) ; pour l'herbe ou le sable, préfère « Copier une zone ».</p>
     </div>
 
     <!-- Outil « Découper la silhouette » (voir retouches.js) -->
@@ -701,6 +733,21 @@
   </div>
 </dialog>
 
+<!-- Les modèles tout prêts (voir modeles.js) -->
+<dialog id="fenetre-modeles" class="fenetre" aria-labelledby="titre-modeles">
+  <h2 id="titre-modeles">Commencer avec un modèle</h2>
+  <div id="liste-modeles" class="grille-modeles"></div>
+  <div id="modele-etape-photo" class="pile serree" hidden>
+    <p>Ajouter ta photo au modèle « <span id="modele-nom"></span> » ?</p>
+    <button type="button" class="bouton principal large" data-action="modele-photo"><svg class="icone" aria-hidden="true"><use href="#i-galerie"/></svg>Choisir une photo de ma galerie</button>
+    <button type="button" class="bouton large" data-action="modele-sans-photo"><svg class="icone" aria-hidden="true"><use href="#i-toile"/></svg>Sans photo (je l'ajouterai après)</button>
+    <button type="button" class="bouton large discret" data-action="modele-retour">← Revoir les modèles</button>
+  </div>
+  <div class="rangee fin">
+    <button type="button" class="bouton" data-action="fermer-fenetre"><svg class="icone" aria-hidden="true"><use href="#i-croix"/></svg>Fermer</button>
+  </div>
+</dialog>
+
 <!-- Le collage (voir collage.js) -->
 <dialog id="fenetre-collage" class="fenetre" aria-labelledby="titre-collage">
   <h2 id="titre-collage">Collage</h2>
@@ -846,6 +893,7 @@
 <!-- Pas de filtre de type : Android ne reconnaît pas toujours les « .omniphoto » -->
 <input type="file" id="fichier-montage" hidden>
 <input type="file" id="fichier-collage" accept="image/*" multiple hidden>
+<input type="file" id="fichier-modele" accept="image/*" hidden>
 
 <!-- Le guide de la première fois (voir guide.js) -->
 <div id="guide" class="guide" popover="manual" hidden role="dialog" aria-labelledby="guide-texte">

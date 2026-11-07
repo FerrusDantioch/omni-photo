@@ -108,6 +108,16 @@ const ACTIONS = {
   'ajouter-signature': () => Signature.ajouter(),
   'enregistrer-signature': () => Signature.enregistrer(Montage.calqueChoisi()),
   'lumiere-auto': () => OutilLumiere.auto(),
+  'outil-correcteur': () => Retouche.ouvrir(OutilCorrecteur),
+  'correcteur-comparer': () => OutilCorrecteur.basculerComparaison(),
+  'correcteur-retirer': () => OutilCorrecteur.retirerDernier(),
+  'correcteur-valider': () => OutilCorrecteur.valider(),
+  'correcteur-source': () => OutilCorrecteur.choisirAutreSource(),
+  'ouvrir-modeles': () => Modeles.ouvrir(),
+  'modele-choisir': (b) => Modeles.choisir(b.dataset.id),
+  'modele-photo': () => choisirFichier('#fichier-modele'),
+  'modele-sans-photo': () => Modeles.creer(null),
+  'modele-retour': () => { $('#modele-etape-photo').hidden = true; $('#liste-modeles').hidden = false; },
   'montage-ouvrir': (b) => Accueil.ouvrirMontage(b.dataset.id),
   'montage-renommer': (b) => Accueil.renommer(b.dataset.id),
   'valider-nom': () => Accueil.validerNom(),
@@ -428,6 +438,9 @@ async function demarrer() {
   $('#fenetre-collage').addEventListener('input', () => Collage.apercu());
   $('#fenetre-collage').addEventListener('change', () => Collage.apercu());
   $('#fenetre-collage').addEventListener('close', () => Collage.annuler());
+  $('#fichier-modele').addEventListener('change', (e) => { if (e.target.files[0]) Modeles.creer(e.target.files[0]); });
+  $('#cr-taille').addEventListener('input', () => OutilCorrecteur.montrerReglage());
+  $('#outil-correcteur').addEventListener('change', () => { if (Editeur.outil === OutilCorrecteur) OutilCorrecteur._maj(); });
   $('#fenetre-nom').addEventListener('submit', (e) => { e.preventDefault(); Accueil.validerNom(); });
 
   // Nouveaux outils de la version 1.1

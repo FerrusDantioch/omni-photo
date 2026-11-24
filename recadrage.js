@@ -223,13 +223,14 @@ const OutilRecadrage = {
         if (b > 0) k = Math.max(k, b / (halfH + base.oy));
         else if (b < 0) k = Math.max(k, -b / (halfH - base.oy));
       }
+      k = Math.min(k, Math.max(1, 40 / base.echelle));
       x = cx + k * (base.ox * cosR - base.oy * sinR);
       y = cy + k * (base.ox * sinR + base.oy * cosR);
     } else {
       x = base.px ?? (cx + base.ox);
       y = base.py ?? (cy + base.oy);
     }
-    const echelle = base.echelle * k;
+    const echelle = Math.min(40, base.echelle * k);
     Historique.debut();
     Montage.modifier(c.id, { rotation: this._quart + angle, echelle, x, y });
     this._maj();

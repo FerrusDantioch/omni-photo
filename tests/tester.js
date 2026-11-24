@@ -1420,10 +1420,11 @@ lancer('Omni-Photo', async () => {
     await p.click('[data-action="enregistrer-signature"]');
     await p.waitForTimeout(500);
     await p.click('[data-action="accueil"]');
+    await p.waitForFunction(() => document.body.dataset.vue === 'accueil');
     await p.click('[data-action="ouvrir-toile"]');
     await p.click('label.choix:has(input[value="1280x720"])');
     await p.click('[data-action="creer-toile"]');
-    await attendre(p, 400);
+    await p.waitForFunction(() => document.body.dataset.vue === 'editeur' && typeof Montage !== 'undefined' && !!Montage.doc && Montage.doc.largeur === 1280 && Montage.doc.hauteur === 720);
     e = await etat(p);
     verifier(e.doc.largeur === 1280 && e.doc.hauteur === 720, 'toile vide « Miniature YouTube » : 1 280 × 720');
     await toucherOutil(p, 'ajouter-signature');
@@ -1535,22 +1536,31 @@ lancer('Omni-Photo', async () => {
     verifier(manifeste.share_target && manifeste.share_target.action === './partage' && manifeste.share_target.params.files[0].name === 'photos', 'le manifeste annonce Omni-Photo dans le menu « Partager »');
     // Ce que fait Android : envoyer la photo à « ./partage » (la CSP form-action 'none' bloque
     // la soumission de <form> dans la page, on exerce donc directement la route POST du SW)
-    const envoyer = (tailles) => p.evaluate(async (tailles) => {
-      const fd = new FormData();
-      for (const [l, h] of tailles) {
-        const c = document.createElement('canvas'); c.width = l; c.height = h; c.getContext('2d').fillRect(0, 0, l, h);
-        fd.append('photos', new File([await new Promise((ok) => c.toBlob(ok, 'image/png'))], `photo-${l}.png`, { type: 'image/png' }));
-      }
-      await fetch('./partage', { method: 'POST', body: fd, redirect: 'manual' });
-      location.assign('./index.html?partage=' + Date.now() + '#partage');
-    }, tailles);
-    await Promise.all([p.waitForNavigation(), envoyer([[640, 480]])]);
+    let noncePartage = 0;
+    const envoyer = async (tailles) => {
+      const nonce = `${Date.now()}-${++noncePartage}`;
+      await Promise.all([
+        p.waitForURL((u) => u.searchParams.get('partage') === nonce),
+        p.evaluate(async ({ tailles, nonce }) => {
+          const fd = new FormData();
+          for (const [l, h] of tailles) {
+            const c = document.createElement('canvas'); c.width = l; c.height = h; c.getContext('2d').fillRect(0, 0, l, h);
+            fd.append('photos', new File([await new Promise((ok) => c.toBlob(ok, 'image/png'))], `photo-${l}.png`, { type: 'image/png' }));
+          }
+          await fetch('./partage', { method: 'POST', body: fd, redirect: 'manual' });
+          location.assign('./index.html?partage=' + encodeURIComponent(nonce) + '#partage');
+        }, { tailles, nonce })
+      ]);
+      return nonce;
+    };
+    await envoyer([[640, 480]]);
     await p.waitForFunction(() => document.body.dataset.pret === 'oui');
     await p.waitForFunction(() => Montage.doc && Montage.doc.largeur === 640, null, { timeout: 15000 }).catch(() => {});
     let e = await etat(p);
     verifier(e.vue === 'editeur' && e.doc && e.doc.largeur === 640 && e.doc.hauteur === 480, 'une photo partagée s’ouvre directement dans l’éditeur', e.doc && [e.doc.largeur, e.doc.hauteur]);
     await p.click('[data-action="accueil"]');
-    await Promise.all([p.waitForNavigation(), envoyer([[300, 200], [200, 300]])]);
+    await p.waitForFunction(() => document.body.dataset.vue === 'accueil');
+    await envoyer([[300, 200], [200, 300]]);
     await p.waitForFunction(() => document.body.dataset.pret === 'oui');
     await p.waitForFunction(() => document.querySelector('#fenetre-collage').open, null, { timeout: 15000 }).catch(() => {});
     verifier(await p.$eval('#fenetre-collage', (d) => d.open), 'plusieurs photos partagées : le collage s’ouvre');

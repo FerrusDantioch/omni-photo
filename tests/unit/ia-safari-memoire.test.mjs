@@ -31,6 +31,17 @@ function creerWorkerMockClass(mode = 'module') {
   return { MockWorker, instances };
 }
 
+async function attendreWorker(liste, minLen, timeoutMs = 2000) {
+  const fin = Date.now() + timeoutMs;
+  while (Date.now() < fin) {
+    if (liste.length >= minLen && liste[minLen - 1].posted.length > 0) {
+      return liste[minLen - 1];
+    }
+    await new Promise((ok) => setTimeout(ok, 5));
+  }
+  throw new Error(`Délai dépassé en attendant le worker #${minLen} (reçus : ${liste.length})`);
+}
+
 function creerEnvIa(overrides = {}) {
   const { MockWorker, instances } = creerWorkerMockClass(overrides.workerMode || 'module');
   const ctx = creerContexte({
@@ -95,15 +106,13 @@ test('Detourage._classerErreur() et chemins d’erreur worker (onerror, type err
   ctx.__r = r;
   const pErr = executer(ctx, `Detourage.masque(__r, 'objet', () => {})`);
   // Attendre laisserAfficher() pour que postMessage soit appelé
-  await new Promise((ok) => setTimeout(ok, 60));
-  const w = workerInstances[workerInstances.length - 1];
+  const w = await attendreWorker(workerInstances, 1);
   w.onerror({ message: '', preventDefault() {} });
   await assert.rejects(() => pErr, (e) => e.code === 'memoire');
 
   // Erreur via m.type === 'erreur'
   const pErr2 = executer(ctx, `Detourage.masque(__r, 'objet', () => {})`);
-  await new Promise((ok) => setTimeout(ok, 60));
-  const w2 = workerInstances[workerInstances.length - 1];
+  const w2 = await attendreWorker(workerInstances, 2);
   w2.onmessage({ data: { type: 'erreur', message: 'no available backend found' } });
   await assert.rejects(() => pErr2, (e) => e.code === 'impossible');
   annulerMinuteurs(ctx);
@@ -141,8 +150,7 @@ test('Detourage minuteur d’inactivité 150s, réarmement dans finally sur erre
   c3.__r = { image: creerToile(c3, 20, 20, [1, 2, 3, 255]), largeur: 20, hauteur: 20 };
   executer(c3, `Detourage._workerModuleOk = true;`);
   const pActive = executer(c3, `Detourage.masque(__r, 'objet', () => {})`);
-  await new Promise((ok) => setTimeout(ok, 60));
-  const w3 = wi3[wi3.length - 1];
+  const w3 = await attendreWorker(wi3, 1);
   executer(c3, `Detourage.fermerTravailleur();`);
   await assert.rejects(() => pActive, (e) => e.code === 'arret');
   assert.equal(w3.terminated, true);

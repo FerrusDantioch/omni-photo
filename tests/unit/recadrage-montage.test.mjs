@@ -129,3 +129,53 @@ test('OutilRecadrage.redresser (ne couvrant pas le centre) garde k=1 et position
   assert.equal(lireSymbole(ctx, 'Historique._avant'), null);
   assert.ok(lireSymbole(ctx, 'Historique.passe.length') >= 1);
 });
+
+test('OutilRecadrage.redresser borne k au plafond echelle <= 40 avant de calculer (x, y) pour garder le pivot dans l’image', () => {
+  // 1. Cas extrême (echelle=2, bord à 10 px du centre) : k borné à 20 -> centre du montage conservé dans le calque
+  const ctx = creerEnvRecadrage();
+  executer(ctx, `
+    Montage.nouveau(400, 300);
+    const c = Montage.ajouterImage('r1', 1200, 900);
+    Montage.modifier(c.id, { echelle: 2, x: 1390, y: 150, rotation: 0 });
+    OutilRecadrage.ouvrir();
+    OutilRecadrage.redresser(10);
+  `);
+
+  const c10 = lireSymbole(ctx, 'Montage.doc.calques[0]');
+  assert.equal(c10.echelle, 40);
+  const rad = (10 * Math.PI) / 180;
+  const attenduX = 200 + 20 * 1190 * Math.cos(rad);
+  const attenduY = 150 + 20 * 1190 * Math.sin(rad);
+  assert.ok(Math.abs(c10.x - attenduX) < 1e-6, `x attendu=${attenduX}, obtenu=${c10.x}`);
+  assert.ok(Math.abs(c10.y - attenduY) < 1e-6, `y attendu=${attenduY}, obtenu=${c10.y}`);
+
+  // Le centre du montage (200, 150) reste bien à l'intérieur du calque (200 px de marge)
+  const dx = 200 - c10.x, dy = 150 - c10.y;
+  const lx = dx * Math.cos(rad) + dy * Math.sin(rad);
+  const ly = -dx * Math.sin(rad) + dy * Math.cos(rad);
+  assert.ok(Math.abs(lx) <= (c10.largeur * c10.echelle) / 2 - 190);
+  assert.ok(Math.abs(ly) <= (c10.hauteur * c10.echelle) / 2);
+
+  // 2. Cas valide à 0° proche du plafond (echelle=38, marge 201 px) : redresser(10) dépasse 40x -> borné cohérent, retour à 0° exact
+  const ctx2 = creerEnvRecadrage();
+  executer(ctx2, `
+    Montage.nouveau(400, 300);
+    const c = Montage.ajouterImage('r1', 1200, 900);
+    // halfW = 600 * 38 = 22800 ; ox = 22599 => bord gauche à -1 px du document à 0°
+    Montage.modifier(c.id, { echelle: 38, x: 22799, y: 150, rotation: 0 });
+    OutilRecadrage.ouvrir();
+    OutilRecadrage.redresser(10);
+  `);
+  const c38 = lireSymbole(ctx2, 'Montage.doc.calques[0]');
+  assert.equal(c38.echelle, 40);
+  const kClamp = 40 / 38;
+  assert.ok(Math.abs(c38.x - (200 + kClamp * 22599 * Math.cos(rad))) < 1e-5);
+  assert.ok(Math.abs(c38.y - (150 + kClamp * 22599 * Math.sin(rad))) < 1e-5);
+
+  executer(ctx2, `OutilRecadrage.redresser(0);`);
+  const c0 = lireSymbole(ctx2, 'Montage.doc.calques[0]');
+  assert.equal(c0.echelle, 38);
+  assert.ok(Math.abs(c0.x - 22799) < 1e-6);
+  assert.ok(Math.abs(c0.y - 150) < 1e-6);
+  assert.equal(c0.rotation, 0);
+});

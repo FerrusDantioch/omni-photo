@@ -124,14 +124,19 @@ test('CSP stricte dans index.html et zéro code/attribut inline', () => {
   assert.equal(/\son[a-z]+\s*=/i.test(html), false, 'index.html ne doit contenir aucun gestionnaire inline on*=');
 
   // Vérification des injections HTML style= / on*= dans les scripts de l'application
+  // (y compris littéraux/gabarits multi-lignes, en ignorant les commentaires JS)
   const jsRacine = fs.readdirSync(RACINE).filter((f) => f.endsWith('.js') && f !== 'sw.js');
+  const litteralOuCommentaire = /\/\*[\s\S]*?\*\/|\/\/[^\r\n]*|('(?:[^'\\\r\n]|\\[\s\S])*'|"(?:[^"\\\r\n]|\\[\s\S])*"|`(?:[^`\\]|\\[\s\S])*`)/g;
   for (const fichier of jsRacine) {
     const code = lire(fichier);
-    assert.equal(
-      /['"`][^'"`\n]*<[a-z][^>]*\s(?:style|on[a-z]+)\s*=/i.test(code),
-      false,
-      `${fichier} ne doit pas injecter d'attribut HTML style= ou on*=`
-    );
+    for (const m of code.matchAll(litteralOuCommentaire)) {
+      if (!m[1]) continue;
+      assert.equal(
+        /<[a-z][^>]*\s(?:style|on[a-z]+)\s*=/i.test(m[1]),
+        false,
+        `${fichier} ne doit pas injecter d'attribut HTML style= ou on*=`
+      );
+    }
   }
 });
 

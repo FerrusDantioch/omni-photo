@@ -206,8 +206,9 @@ const Editeur = {
     this._geste = null;
     this._pointeurs.clear();
     Panneaux.majPanneau();
+    if (this.toile && this.toile.parentElement.clientWidth) this.redimensionner();
+    else this.redessiner();
     Historique.majBoutons();
-    this.redessiner();
   },
 
   /* Les 4 coins d'un calque, en pixels d'écran (haut-gauche, haut-droite,

@@ -167,6 +167,7 @@ async function toucherOutil(p, action) {
     if (b) Panneaux.choisirOnglet(b.closest('[data-groupe]').dataset.groupe);
   }, action);
   await p.click(`#outils-generaux [data-action="${action}"]`);
+  await p.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
 }
 const ongletAjouter = (p) => p.evaluate(() => Panneaux.choisirOnglet('ajouter'));
 
@@ -1588,8 +1589,10 @@ lancer('Omni-Photo', async () => {
     await toucherOutil(p, 'outil-correcteur');
     verifier(await p.evaluate(() => Editeur.outil === OutilCorrecteur), 'le correcteur s’ouvre (onglet « Retoucher »)');
     await p.evaluate(() => { const r = document.querySelector('#cr-taille'); r.value = 30; r.dispatchEvent(new Event('input', { bubbles: true })); });
-    const tache = await versEcran(p, 300, 200), tache2 = await versEcran(p, 304, 202);
-    const effacer = () => doigts(p, [['pointerdown', 1, tache.x, tache.y], ['pointermove', 1, tache2.x, tache2.y], ['pointerup', 1, tache2.x, tache2.y]]);
+    const effacer = async () => {
+      const tache = await versEcran(p, 300, 200), tache2 = await versEcran(p, 304, 202);
+      await doigts(p, [['pointerdown', 1, tache.x, tache.y], ['pointermove', 1, tache2.x, tache2.y], ['pointerup', 1, tache2.x, tache2.y]]);
+    };
     await effacer();
     let px = await pixel(p, photo.ressource, 300, 200, true);
     verifier(Math.abs(px[0] - 0x88) < 22 && Math.abs(px[2] - 0xaa) < 22, 'effacer : la tache disparaît, remplie par le mur autour', px);

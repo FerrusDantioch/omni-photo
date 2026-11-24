@@ -47,8 +47,8 @@ const Retouche = {
     }
     Historique.fin();
     outil.commencer(c);
-    Editeur.choisirOutil(outil);
     $$('.nom-cible').forEach((el) => { el.textContent = 'Image retouchée : ' + c.nom; });
+    Editeur.choisirOutil(outil);
     return true;
   },
 

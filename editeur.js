@@ -56,6 +56,7 @@ const Editeur = {
   /* ---------- Affichage ---------- */
 
   redimensionner() {
+    if (!this.toile || !this.toile.parentElement) return;
     const zone = this.toile.parentElement;
     const dpr = window.devicePixelRatio || 1;
     const l = Math.max(1, Math.round(zone.clientWidth * dpr));
@@ -71,12 +72,12 @@ const Editeur = {
   /* Montre toute l'image, centrée, avec une petite marge. */
   ajusterVue() {
     const doc = Montage.doc;
-    const zone = this.toile.parentElement;
-    if (!doc || !zone.clientWidth) return;
+    const zone = this.toile && this.toile.parentElement;
+    if (!doc || !zone || !zone.clientWidth || !zone.clientHeight) return;
     const marge = 16;
     const W = zone.clientWidth, H = zone.clientHeight;
-    const e = Math.min((W - marge * 2) / doc.largeur, (H - marge * 2) / doc.hauteur);
-    this.vue = { e: Math.max(e, 0.001), x: (W - doc.largeur * e) / 2, y: (H - doc.hauteur * e) / 2 };
+    const e = Math.max(0.001, Math.min((W - marge * 2) / doc.largeur, (H - marge * 2) / doc.hauteur));
+    this.vue = { e, x: (W - doc.largeur * e) / 2, y: (H - doc.hauteur * e) / 2 };
     this._vueAjustee = true;
     this.redessiner();
   },
@@ -93,6 +94,7 @@ const Editeur = {
   },
 
   _dessiner() {
+    if (!this.ctx || !this.toile) return;
     const ctx = this.ctx, doc = Montage.doc;
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -206,7 +208,8 @@ const Editeur = {
     this._geste = null;
     this._pointeurs.clear();
     Panneaux.majPanneau();
-    if (this.toile && this.toile.parentElement.clientWidth) this.redimensionner();
+    const zone = this.toile && this.toile.parentElement;
+    if (zone && zone.clientWidth && zone.clientHeight) this.redimensionner();
     else this.redessiner();
     Historique.majBoutons();
   },

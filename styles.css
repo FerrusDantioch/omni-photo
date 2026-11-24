@@ -605,6 +605,8 @@ body[data-vue="editeur"] .message { top: calc(78px + env(safe-area-inset-top)); 
 /* L'impression (impression.js) : seule la feuille préparée est imprimée.
    Le blanc pur est ici celui du papier, pas de l'interface. */
 #impression { display: none; }
+.sprites-svg { position: absolute; }
+.marge-haut { margin-top: 10px; }
 @media print {
   html, body {
     margin: 0 !important; padding: 0 !important; background: #fff !important;

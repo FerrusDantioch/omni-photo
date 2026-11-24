@@ -8,6 +8,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' blob: data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
 <title>Omni-Photo</title>
 <meta name="description" content="Omni-Photo — le montage photo tout simple, sur téléphone et tablette. Gratuit, sans publicité, fonctionne hors ligne.">
 <meta name="theme-color" content="#14111d">
@@ -52,7 +53,7 @@
 
 <!-- Petites icônes dessinées une seule fois, réutilisées partout avec <use>.
      Elles sont toujours accompagnées d'un texte. -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<svg width="0" height="0" class="sprites-svg" aria-hidden="true">
   <defs>
     <symbol id="i-galerie" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></g></symbol>
     <symbol id="i-image" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></g></symbol>
@@ -542,9 +543,11 @@
         </div>
       </div>
       <p>Un outil de montage photo tout simple, pour ton téléphone et ta tablette : ajouter des textes
-         et des images, les déplacer, les agrandir, les tourner, corriger les yeux rouges, découper une
-         silhouette, recadrer, régler la lumière, retirer ou flouter le fond, ajouter des formes, puis enregistrer
-         le résultat en PNG ou en JPG.</p>
+         et des images, les déplacer, les agrandir, les tourner, corriger les yeux rouges ou un petit défaut
+         (correcteur), découper une silhouette, recadrer, régler la lumière, retirer ou flouter le fond,
+         ajouter un contour et une ombre, des formes ou ma signature, faire un collage (2 à 9 photos),
+         commencer avec des modèles tout prêts, cacher une partie de la photo (pixels ou flou), puis
+         enregistrer le résultat en PNG ou en JPG, imprimer ou faire un PDF.</p>
       <p>Le retrait automatique du fond utilise une intelligence artificielle qui tourne <strong>dans ton
          appareil</strong> : tes photos ne sont jamais envoyées ailleurs.</p>
       <p><strong>Application gratuite et sans publicité.</strong> Pas de compte, pas de pistage.
@@ -760,7 +763,7 @@
 <!-- Téléchargement de l'IA (première fois) : on demande l'accord -->
 <dialog id="fenetre-ia" class="fenetre" aria-labelledby="titre-fenetre-ia">
   <h2 id="titre-fenetre-ia">Télécharger l'intelligence artificielle ?</h2>
-  <p style="margin-top:10px">Pour détourer (« <span id="ia-modele">Tout sujet</span> »), Omni-Photo doit d'abord télécharger
+  <p class="marge-haut">Pour détourer (« <span id="ia-modele">Tout sujet</span> »), Omni-Photo doit d'abord télécharger
      l'intelligence artificielle : <strong id="ia-taille">19 Mo</strong>, <strong>une seule fois</strong>.
      Ensuite, elle marche même sans internet, et ta photo n'est jamais envoyée.</p>
   <p class="aide">Conseil : utilise le Wi-Fi, pour ne pas consommer ton forfait.</p>
@@ -966,7 +969,6 @@
 
 <!-- La feuille à imprimer : invisible à l'écran, seule visible à l'impression -->
 <div id="impression" aria-hidden="true"><img alt=""></div>
-<style id="style-impression"></style>
 
 <!-- Le guide de la première fois (voir guide.js) -->
 <div id="guide" class="guide" popover="manual" hidden role="dialog" aria-labelledby="guide-texte">

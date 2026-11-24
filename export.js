@@ -14,10 +14,16 @@
 
 const Export = {
   enCours: false,
+  _pret: null,
+
+  reinitialiser() {
+    this._pret = null;
+  },
 
   initialiser() {
     const fenetre = $('#fenetre-export');
     fenetre.addEventListener('input', () => this.majFenetre());
+    fenetre.addEventListener('close', () => { this._pret = null; });
     // Le bouton « Partager » n'apparaît que si le téléphone sait partager des fichiers
     $('[data-action="partager"]').hidden = !this._peutPartager();
   },
@@ -124,6 +130,7 @@ const Export = {
 
   /* Enregistre le fichier dans le téléphone (dossier « Téléchargements »). */
   async enregistrer() {
+    this._pret = null;
     const f = await this._preparer();
     if (!f) return;
     const url = URL.createObjectURL(f.blob);
@@ -169,6 +176,7 @@ const Export = {
         Message.montrer('Ton image est prête : touche encore une fois « Partager ».');
       } else if (e && e.name !== 'AbortError') {
         // « AbortError » : la personne a simplement fermé le menu de partage
+        this._pret = null;
         Message.erreur('Le partage n\'a pas marché. Utilise plutôt « Enregistrer », puis partage l\'image depuis ta galerie.');
       }
     }

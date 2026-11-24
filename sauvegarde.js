@@ -120,6 +120,10 @@ function nomParDefaut() {
 
 const ENTETE_FICHIER = 'OMNIPHOTO-MONTAGE-1\n';
 const ENTETE_TOUT = 'OMNIPHOTO-TOUT-1\n';     // tous les montages (version 1.2)
+const MAX_JSON_IMPORT = 16 * 1024 * 1024;
+const MAX_COTE_DOC = 16384;
+const TYPES_IMAGES_IMPORT = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp']);
+const TYPES_CALQUES_IMPORT = new Set(['image', 'texte', 'forme', 'fond']);
 
 const Sauvegarde = {
   _minuteur: null,
@@ -203,14 +207,24 @@ const Sauvegarde = {
     return new Promise((ok) => toile.toBlob((b) => { toile.width = 0; ok(b); }, 'image/jpeg', 0.75));
   },
 
-  /* Transforme une image dessinée en fichier PNG (pour la ranger). */
-  _versFichier(image) {
+  /* Transforme une image dessinée en fichier WebP (ou PNG en repli) pour la ranger. */
+  async _versFichier(image) {
     const { toile, ctx } = nouvelleToile(image.width, image.height);
-    ctx.drawImage(image, 0, 0);
-    return new Promise((ok, ko) => toile.toBlob((b) => {
-      toile.width = 0;
-      b ? ok(b) : ko(new Error('memoire'));
-    }, 'image/png'));
+    try {
+      ctx.drawImage(image, 0, 0);
+      const coder = (type, qualite) => new Promise((ok) => {
+        try { toile.toBlob((b) => ok(b && b.size ? b : null), type, qualite); }
+        catch (e) { ok(null); }
+      });
+      let blob = await coder('image/webp', 0.92);
+      if (!blob || blob.type !== 'image/webp') {
+        blob = await coder('image/png');
+      }
+      if (!blob) throw new Error('memoire');
+      return blob;
+    } finally {
+      toile.width = toile.height = 0;
+    }
   },
 
   /* Tous les montages, du plus récent au plus ancien :
@@ -275,8 +289,12 @@ const Sauvegarde = {
     if (Montage.id === id) {
       Montage.doc = null;
       Montage.id = null;
+      Montage.selection = null;
       Ressources.vider();
       Historique.vider();
+      if (typeof Accueil !== 'undefined' && typeof Accueil._libererRessourcesOutils === 'function') {
+        Accueil._libererRessourcesOutils();
+      }
     }
     await Base.effacer('montages', id);
     await this._menage();
@@ -334,47 +352,126 @@ const Sauvegarde = {
      nouveaux numéros. */
   async depuisFichier(fichier) {
     const pasBon = new Error('Ce fichier n\'est pas une sauvegarde Omni-Photo (fichier « .omniphoto »).');
+    const incomplet = new Error('Ce fichier .omniphoto est incomplet (téléchargement interrompu ?).');
+    if (!fichier || typeof fichier.size !== 'number' || fichier.size < 21) throw pasBon;
     const debut = new TextDecoder().decode(await fichier.slice(0, 24).arrayBuffer());
     const entete = [ENTETE_FICHIER, ENTETE_TOUT].find((e) => debut.startsWith(e));
-    if (!entete) throw pasBon;
+    if (!entete || entete.length + 4 > fichier.size) throw pasBon;
     const lg = new DataView(await fichier.slice(entete.length, entete.length + 4).arrayBuffer()).getUint32(0, true);
+    if (!Number.isSafeInteger(lg) || lg <= 0 || lg > MAX_JSON_IMPORT) throw pasBon;
+    const debutJson = entete.length + 4;
+    if (debutJson + lg > fichier.size) throw incomplet;
     let description;
     try {
-      const debutJson = entete.length + 4;
       description = JSON.parse(new TextDecoder().decode(await fichier.slice(debutJson, debutJson + lg).arrayBuffer()));
     } catch (e) { throw pasBon; }
-    const montages = entete === ENTETE_TOUT ? description && description.montages
-      : description && description.doc && [{ nom: description.nom, doc: description.doc }];
-    if (!Array.isArray(montages) || !Array.isArray(description.fichiers)) throw pasBon;
-    // De NOUVEAUX numéros pour chaque image : importer deux fois le même
-    // fichier ne mélange jamais deux montages.
+    if (!description || typeof description !== 'object') throw pasBon;
+    const montages = entete === ENTETE_TOUT ? description.montages
+      : description.doc && [{ nom: description.nom, doc: description.doc }];
+    if (!Array.isArray(montages) || montages.length === 0 || !Array.isArray(description.fichiers)) throw pasBon;
+
+    // 1. Validation complète des fichiers et schémas AVANT toute écriture en base
     const nouveaux = new Map();
-    let position = entete.length + 4 + lg;
+    const imagesAPoser = [];
+    let position = debutJson + lg;
     for (const f of description.fichiers) {
-      const blob = fichier.slice(position, position + f.taille, f.type || 'image/png');
-      position += f.taille;
-      if (blob.size !== f.taille) throw new Error('Ce fichier .omniphoto est incomplet (téléchargement interrompu ?).');
+      if (!f || typeof f !== 'object' || typeof f.id !== 'string' || !f.id || nouveaux.has(f.id)) throw pasBon;
+      if (!Number.isSafeInteger(f.taille) || f.taille <= 0 || f.taille > LIMITES.octetsMax) throw pasBon;
+      if (position + f.taille > fichier.size) throw incomplet;
+      let type = 'image/png';
+      if (f.type != null && f.type !== '') {
+        if (typeof f.type !== 'string') throw pasBon;
+        const brut = f.type.toLowerCase().split(';')[0].trim();
+        const norm = brut === 'image/jpg' ? 'image/jpeg' : brut;
+        if (!TYPES_IMAGES_IMPORT.has(norm)) throw pasBon;
+        type = norm;
+      }
+      const maxCote = f.maxCote == null ? Infinity
+        : (Number.isFinite(f.maxCote) && f.maxCote > 0 ? Math.min(f.maxCote, LIMITES.photo) : Infinity);
       const rid = nouvelId('r');
       nouveaux.set(f.id, rid);
-      // Copie en mémoire : le fichier choisi peut disparaître ensuite
-      await Base.ecrire('images', rid, { blob: new Blob([await blob.arrayBuffer()], { type: blob.type }), maxCote: f.maxCote || Infinity });
-      this._rangees.add(rid);
+      imagesAPoser.push({ rid, start: position, end: position + f.taille, type, maxCote });
+      position += f.taille;
     }
-    const ajoutes = [];
+
+    const montagesAPoser = [];
     for (const m of montages) {
+      if (!m || typeof m !== 'object' || !m.doc || typeof m.doc !== 'object') throw pasBon;
+      if (m.nom != null && typeof m.nom !== 'string') throw pasBon;
       const doc = m.doc;
-      for (const c of doc.calques || []) {
-        if (c.ressource) c.ressource = nouveaux.get(c.ressource) || c.ressource;
-        if (c.source) c.source = nouveaux.get(c.source) || c.source;
+      if (!Number.isSafeInteger(doc.largeur) || !Number.isSafeInteger(doc.hauteur) ||
+          doc.largeur < 1 || doc.hauteur < 1 || doc.largeur > MAX_COTE_DOC || doc.hauteur > MAX_COTE_DOC ||
+          doc.largeur * doc.hauteur > LIMITES.pixelsMax) throw pasBon;
+      if (!Array.isArray(doc.calques)) throw pasBon;
+      for (const c of doc.calques) {
+        if (!c || typeof c !== 'object' || !TYPES_CALQUES_IMPORT.has(c.type)) throw pasBon;
+        if (typeof c.id !== 'string' || !c.id) c.id = nouvelId('c');
+        if (c.type !== 'fond') {
+          if (!Number.isFinite(c.x) || !Number.isFinite(c.y) ||
+              !Number.isFinite(c.echelle) || c.echelle <= 0 ||
+              !Number.isFinite(c.rotation) || !Number.isFinite(c.opacite)) throw pasBon;
+        }
+        if (c.type === 'image') {
+          if (typeof c.ressource !== 'string' || !c.ressource ||
+              !Number.isFinite(c.largeur) || c.largeur <= 0 ||
+              !Number.isFinite(c.hauteur) || c.hauteur <= 0) throw pasBon;
+        } else if (c.type === 'texte') {
+          if (typeof c.texte !== 'string' || !Number.isFinite(c.taille) || c.taille <= 0 ||
+              !c.contour || typeof c.contour !== 'object' || !c.ombre || typeof c.ombre !== 'object') throw pasBon;
+        } else if (c.type === 'forme') {
+          if (!Number.isFinite(c.largeur) || c.largeur <= 0 ||
+              !Number.isFinite(c.hauteur) || c.hauteur <= 0 ||
+              !c.remplissage || typeof c.remplissage !== 'object' || !c.trait || typeof c.trait !== 'object') throw pasBon;
+        }
+        // Correspondance stricte : aucun repli vers l'ancien numéro (ni clé existante)
+        if (c.ressource != null) {
+          if (typeof c.ressource !== 'string' || !nouveaux.has(c.ressource)) throw pasBon;
+          c.ressource = nouveaux.get(c.ressource);
+        }
+        if (c.source != null) {
+          if (typeof c.source !== 'string' || !nouveaux.has(c.source)) throw pasBon;
+          c.source = nouveaux.get(c.source);
+        }
       }
-      const id = nouvelId('m');
-      await Base.ecrire('montages', id, {
-        id, nom: m.nom || 'Montage importé', date: Date.now() - (montages.length - ajoutes.length), doc: JSON.stringify(doc),
-        ressources: [...idsDuDoc(doc)], miniature: null
-      });
-      ajoutes.push(id);
+      montagesAPoser.push({ nom: m.nom, doc });
     }
-    return ajoutes;
+
+    // 2. Écritures suivies avec annulation complète en cas d'échec
+    const imagesEcrites = [];
+    const montagesEcrits = [];
+    try {
+      for (const im of imagesAPoser) {
+        const blob = fichier.slice(im.start, im.end, im.type);
+        if (blob.size !== im.end - im.start) throw incomplet;
+        // Copie en mémoire : le fichier choisi peut disparaître ensuite
+        await Base.ecrire('images', im.rid, {
+          blob: new Blob([await blob.arrayBuffer()], { type: im.type }),
+          maxCote: im.maxCote
+        });
+        imagesEcrites.push(im.rid);
+        this._rangees.add(im.rid);
+      }
+      for (let i = 0; i < montagesAPoser.length; i++) {
+        const m = montagesAPoser[i];
+        const id = nouvelId('m');
+        const nom = (typeof m.nom === 'string' ? m.nom.replace(/\s+/g, ' ').trim().slice(0, 80) : '') || 'Montage importé';
+        await Base.ecrire('montages', id, {
+          id, nom, date: Date.now() - (montagesAPoser.length - i), doc: JSON.stringify(m.doc),
+          ressources: [...idsDuDoc(m.doc)], miniature: null
+        });
+        montagesEcrits.push(id);
+      }
+      return montagesEcrits;
+    } catch (e) {
+      for (const id of montagesEcrits) {
+        try { await Base.effacer('montages', id); } catch (_) { /* rien */ }
+      }
+      for (const rid of imagesEcrites) {
+        this._rangees.delete(rid);
+        try { await Base.effacer('images', rid); } catch (_) { /* rien */ }
+      }
+      throw e;
+    }
   }
 };
 

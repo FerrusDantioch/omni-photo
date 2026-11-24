@@ -119,6 +119,10 @@ const OutilYeux = {
   dernier: null,       // dernier point touché (pour montrer la zone)
 
   commencer(c) {
+    clearTimeout(this._minuteurReglage);
+    this._minuteurReglage = null;
+    this._reglage = false;
+    if (this.travail) this.travail.width = this.travail.height = 0;
     this.calque = c;
     this.travail = null;
     this.corrections = [];
@@ -166,6 +170,7 @@ const OutilYeux = {
   retirerDernier() {
     if (!this.corrections.length) return false;
     this.corrections.pop();
+    if (this.travail) this.travail.width = this.travail.height = 0;
     this.travail = this.corrections.length ? Retouche.copier(this.calque) : null;
     if (this.travail) {
       const ctx = this.travail.getContext('2d', { willReadFrequently: true });
@@ -206,7 +211,11 @@ const OutilYeux = {
   },
 
   fermer() {
+    clearTimeout(this._minuteurReglage);
+    this._minuteurReglage = null;
+    this._reglage = false;
     Rendu.remplacements.clear();
+    if (this.travail) this.travail.width = this.travail.height = 0;
     this.travail = null;
     this.corrections = [];
     if (Editeur.outil === this) Editeur.choisirOutil(null);
@@ -500,22 +509,40 @@ const OutilDecoupe = {
     const c = this.calque;
     const r = Ressources.obtenir(c.ressource);
     const { toile, ctx } = nouvelleToile(r.largeur, r.hauteur);
-    ctx.drawImage(r.image, 0, 0);
-    // Le masque : la forme du contour, en noir, au bord adouci si demandé
-    const { toile: masque, ctx: m } = nouvelleToile(r.largeur, r.hauteur);
-    const adoucir = Number($('#d-adoucir').value);
-    if (adoucir > 0) m.filter = `blur(${adoucir}px)`;
-    m.fillStyle = '#000';
-    m.beginPath();
-    this.points.forEach((q, i) => (i ? m.lineTo(q.x, q.y) : m.moveTo(q.x, q.y)));
-    m.closePath();
-    m.fill();
-    // « destination-in » garde ce qui est SOUS le masque (l'intérieur),
-    // « destination-out » garde ce qui est en dehors (l'extérieur).
-    ctx.globalCompositeOperation = this.garder() === 'interieur' ? 'destination-in' : 'destination-out';
-    ctx.drawImage(masque, 0, 0);
-    masque.width = 0;
-    return toile;
+    let masque = null;
+    try {
+      ctx.drawImage(r.image, 0, 0);
+      // Le masque : la forme du contour, en noir, au bord adouci si demandé
+      const cree = nouvelleToile(r.largeur, r.hauteur);
+      masque = cree.toile;
+      const m = cree.ctx;
+      const adoucir = Number($('#d-adoucir').value);
+      const tracer = () => {
+        m.fillStyle = '#000';
+        m.beginPath();
+        this.points.forEach((q, i) => (i ? m.lineTo(q.x, q.y) : m.moveTo(q.x, q.y)));
+        m.closePath();
+        m.fill();
+      };
+      if (adoucir > 0 && supporteFiltreToile(m)) {
+        m.filter = `blur(${adoucir}px)`;
+        tracer();
+        m.filter = 'none';
+      } else {
+        tracer();
+        if (adoucir > 0) flouterToileEnPlace(masque, m, adoucir);
+      }
+      // « destination-in » garde ce qui est SOUS le masque (l'intérieur),
+      // « destination-out » garde ce qui est en dehors (l'extérieur).
+      ctx.globalCompositeOperation = this.garder() === 'interieur' ? 'destination-in' : 'destination-out';
+      ctx.drawImage(masque, 0, 0);
+      return toile;
+    } catch (e) {
+      toile.width = toile.height = 0;
+      throw e;
+    } finally {
+      if (masque) masque.width = masque.height = 0;
+    }
   },
 
   voirApercu() {

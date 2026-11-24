@@ -11,10 +11,10 @@
 'use strict';
 
 const ETAPES_GUIDE = [
-  { cible: '.onglets', texte: 'Les outils sont rangés en trois onglets : « Ajouter » (texte, image, forme), « Retoucher » (recadrer, lumière, yeux rouges, découpe) et « Détourage » (retirer le fond, pinceau, nouveau fond, flou du fond).' },
+  { cible: '.onglets', texte: 'Les outils sont rangés en trois onglets : « Ajouter » (texte, image, forme, calques, signature), « Retoucher » (recadrer, lumière, yeux rouges, découpe, correcteur, cacher) et « Détourage » (retirer le fond, pinceau, nouveau fond, flou du fond).' },
   { cible: '.zone-toile', texte: 'Touche un texte ou une image pour le choisir. Un doigt le déplace, deux doigts l\'agrandissent et le tournent. Sans rien choisir, deux doigts zooment dans la photo.' },
   { cible: '[data-action="annuler"]', texte: 'Une erreur ? « Annuler » revient en arrière, jusqu\'à 30 fois. Ton montage est sauvegardé tout seul dans le téléphone.' },
-  { cible: '[data-action="ouvrir-export"]', texte: 'Quand c\'est prêt, « Exporter » enregistre ton image en PNG ou en JPG, ou la partage.' }
+  { cible: '[data-action="ouvrir-export"]', texte: 'Quand c\'est prêt, « Exporter » enregistre ton image en PNG ou en JPG, la partage, ou permet de l\'imprimer ou en faire un PDF.' }
 ];
 
 const Guide = {

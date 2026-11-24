@@ -66,13 +66,17 @@ const Diagnostic = {
 
     // 5. Les grandes photos (une toile de 4 096 × 4 096 pixels)
     let grandes = false;
+    let toile = null;
     try {
-      const { toile, ctx } = nouvelleToile(4096, 4096);
-      ctx.fillStyle = '#123456';
-      ctx.fillRect(4090, 4090, 6, 6);
-      grandes = ctx.getImageData(4093, 4093, 1, 1).data[2] === 0x56;
-      toile.width = 0;
+      const cree = nouvelleToile(4096, 4096);
+      toile = cree.toile;
+      cree.ctx.fillStyle = '#123456';
+      cree.ctx.fillRect(4090, 4090, 6, 6);
+      grandes = cree.ctx.getImageData(4093, 4093, 1, 1).data[2] === 0x56;
     } catch (e) { /* refusé */ }
+    finally {
+      if (toile) toile.width = toile.height = 0;
+    }
     this._ligne(liste, grandes ? 'ok' : 'attention', 'Grandes photos', grandes
       ? 'Les photos jusqu\'à 4 096 pixels de côté s\'ouvrent sans souci.'
       : 'Le téléphone a du mal avec les très grandes photos : préfère des photos plus petites.');
@@ -114,17 +118,25 @@ const Diagnostic = {
       return;
     }
     // Une image d'essai : un disque orangé sur fond gris
-    const { toile, ctx } = nouvelleToile(600, 400);
-    ctx.fillStyle = '#d5d9e0';
-    ctx.fillRect(0, 0, 600, 400);
-    ctx.fillStyle = '#e4572e';
-    ctx.beginPath();
-    ctx.arc(300, 200, 120, 0, Math.PI * 2);
-    ctx.fill();
-    const r = { image: toile, largeur: 600, hauteur: 400 };
+    let toile = null;
+    let masque = null;
     const debut = performance.now();
-    const masque = await avecIA('objet', (avancer) => Detourage.masque(r, 'objet', avancer));
-    toile.width = 0;
+    try {
+      const cree = nouvelleToile(600, 400);
+      toile = cree.toile;
+      const ctx = cree.ctx;
+      ctx.fillStyle = '#d5d9e0';
+      ctx.fillRect(0, 0, 600, 400);
+      ctx.fillStyle = '#e4572e';
+      ctx.beginPath();
+      ctx.arc(300, 200, 120, 0, Math.PI * 2);
+      ctx.fill();
+      const r = { image: toile, largeur: 600, hauteur: 400 };
+      masque = await avecIA('objet', (avancer) => Detourage.masque(r, 'objet', avancer));
+    } finally {
+      if (toile) toile.width = toile.height = 0;
+      if (masque) masque.width = masque.height = 0;
+    }
     if (!masque) { sortie.textContent = 'Le test n\'a pas pu aller au bout.'; return; }
     const s = (performance.now() - debut) / 1000;
     const avis = s < 4 ? 'rapide' : (s < 10 ? 'correct' : 'lent : ferme les autres applications avant un détourage');

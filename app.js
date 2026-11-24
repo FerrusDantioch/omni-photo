@@ -10,7 +10,7 @@
 
 /* ⚠️ Numéro de version, affiché dans « À propos ». À changer à chaque
    version publiée, EN MÊME TEMPS que CACHE en haut de sw.js. */
-const VERSION = '1.3.0';
+const VERSION = '1.3.1';
 
 
 /* ---------- 1. Les écrans ---------- */
@@ -33,7 +33,7 @@ function afficherVue(nom) {
   } else {
     Guide.terminerSiOuvert();
   }
-  const titre = $(`.vue[data-vue="${nom}"] h1`);
+  const titre = $(`.vue[data-vue="${CSS.escape(String(nom))}"] h1`);
   if (titre && nom !== 'editeur') titre.focus({ preventScroll: true });
   window.scrollTo(0, 0);
 }
@@ -43,18 +43,24 @@ function afficherVue(nom) {
 function allerVers(nom) {
   if (nom === vueActive) return;
   if (nom === 'accueil') {
-    if (location.hash) history.back();
-    else afficherVue('accueil');
+    if (history.state && history.state.omniPhoto) history.back();
+    else {
+      history.replaceState(null, '', location.pathname + location.search);
+      afficherVue('accueil');
+    }
     return;
   }
-  history.pushState(null, '', '#' + nom);
+  history.pushState({ omniPhoto: true }, '', '#' + nom);
   afficherVue(nom);
 }
 
 window.addEventListener('popstate', () => {
   const nom = location.hash.slice(1);
-  if (nom === 'apropos' || nom === 'verifier') afficherVue(nom);
-  else if (nom === 'editeur' && Montage.doc) afficherVue('editeur');
+  if (nom === 'apropos' || nom === 'verifier') {
+    if (Editeur.outil) Editeur.outil.fermer();
+    if (vueActive === 'editeur' && Montage.doc) Sauvegarde.maintenant();
+    afficherVue(nom);
+  } else if (nom === 'editeur' && Montage.doc) afficherVue('editeur');
   else {
     // Retour du téléphone pendant une retouche : elle est abandonnée
     if (Editeur.outil) Editeur.outil.fermer();
@@ -124,7 +130,6 @@ const ACTIONS = {
   'modele-retour': () => { $('#modele-etape-photo').hidden = true; $('#liste-modeles').hidden = false; },
   'montage-ouvrir': (b) => Accueil.ouvrirMontage(b.dataset.id),
   'montage-renommer': (b) => Accueil.renommer(b.dataset.id),
-  'valider-nom': () => Accueil.validerNom(),
   'montage-fichier': (b) => Accueil.enregistrerFichier(b.dataset.id),
   'montage-supprimer': (b) => armerBouton(b, 'Toucher encore', () => Accueil.supprimer(b.dataset.id)),
   'creer-toile': () => {
@@ -170,7 +175,6 @@ const ACTIONS = {
   'modifier-forme': () => FenetreForme.ouvrir(Montage.selection),
   'ouvrir-effets': () => FenetreEffets.ouvrir(Montage.selection),
   'outil-recadrage': () => OutilRecadrage.ouvrir(),
-  'recadrage-format': () => OutilRecadrage.choisirFormat(),
   'recadrage-tourner-gauche': () => OutilRecadrage.tourner(-1),
   'recadrage-tourner-droite': () => OutilRecadrage.tourner(+1),
   'recadrage-appliquer': () => OutilRecadrage.appliquer(),

@@ -85,14 +85,38 @@ const Accueil = {
       : '';
   },
 
+  _libererRessourcesOutils() {
+    if (typeof Detourage !== 'undefined') {
+      if (typeof Detourage.fermerTravailleur === 'function') {
+        Detourage.fermerTravailleur();
+      } else {
+        if (Detourage._enCours && typeof Detourage.arreter === 'function') Detourage.arreter();
+        if (typeof Detourage._jeter === 'function') Detourage._jeter();
+        else if (Detourage._travailleur) {
+          Detourage._travailleur.terminate();
+          Detourage._travailleur = null;
+        }
+      }
+    }
+    if (typeof Export !== 'undefined') {
+      if (typeof Export.reinitialiser === 'function') Export.reinitialiser();
+      else Export._pret = null;
+    }
+    if (typeof Impression !== 'undefined' && typeof Impression.reinitialiser === 'function') {
+      Impression.reinitialiser();
+    }
+  },
+
   /* Avant d'ouvrir ou de commencer un autre montage : celui qui est
      ouvert est sauvegardé, puis la mémoire est libérée. */
   async _rangerCourant() {
     if (Montage.doc) await Sauvegarde.maintenant();
     Montage.doc = null;
     Montage.id = null;
+    Montage.selection = null;
     Ressources.vider();
     Historique.vider();
+    this._libererRessourcesOutils();
   },
 
   /* Une photo vient d'être choisie (galerie ou appareil photo). */
@@ -164,7 +188,7 @@ const Accueil = {
 
   renommer(id) {
     this._renomme = id;
-    const carte = $(`.ouvrir-montage[data-id="${id}"] strong`);
+    const carte = $(`.ouvrir-montage[data-id="${CSS.escape(String(id))}"] strong`);
     $('#nom-montage').value = carte ? carte.textContent : '';
     $('#fenetre-nom').showModal();
     $('#nom-montage').select();
@@ -192,7 +216,7 @@ const Accueil = {
     await laisserAfficher();
     try {
       const blob = await Sauvegarde.versFichier(id);
-      const carte = $(`.ouvrir-montage[data-id="${id}"] strong`);
+      const carte = $(`.ouvrir-montage[data-id="${CSS.escape(String(id))}"] strong`);
       const nom = nomDeFichierMontage(carte ? carte.textContent : 'montage');
       telechargerFichier(blob, nom);
       Message.montrer(`Fichier enregistré : ${nom}, dans « Téléchargements ». Ouvre-le sur la tablette avec « Ouvrir un fichier .omniphoto ».`);

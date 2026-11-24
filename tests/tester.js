@@ -15,7 +15,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { lancer, section, verifier, nouvellePage, controlesCommuns, RACINE, adresse } = require('./outils.js');
+const { lancer, section, verifier, nouvellePage, controlesCommuns, verifierCsp, RACINE, adresse } = require('./outils.js');
 
 const attendre = (p, ms) => p.waitForTimeout(ms);
 const texte = (p, sel) => p.$eval(sel, (el) => el.textContent.replace(/\s+/g, ' ').trim());
@@ -203,15 +203,54 @@ lancer('Omni-Photo', async () => {
   if (!process.env.RAPIDE) await controlesCommuns({ serviceWorker: 'sw.js' });
 
   await section('Fichiers du dépôt', async () => {
-    for (const f of ['README.md', 'LICENCES-TIERS.md', 'LICENCE-APACHE-2.0.txt', 'LICENCE-ONNXRUNTIME-MIT.txt', 'LICENSE']) {
+    for (const f of ['.nojekyll', '.gitignore', 'README.md', 'LICENCES-TIERS.md', 'LICENCE-APACHE-2.0.txt', 'LICENCE-ONNXRUNTIME-MIT.txt', 'LICENSE']) {
       verifier(fs.existsSync(path.join(RACINE, f)), f + ' existe');
+    }
+    const gi = fs.readFileSync(path.join(RACINE, '.gitignore'), 'utf8');
+    verifier(gi.includes('node_modules/') && gi.includes('package.json') && gi.includes('package-lock.json'), '.gitignore exclut node_modules, package.json et package-lock.json');
+  });
+
+  await section('Sécurité CSP stricte et sonde d’exécution', async () => {
+    const html = fs.readFileSync(path.join(RACINE, 'index.html'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+    verifier(/<meta\s+http-equiv=(?:"Content-Security-Policy"|'Content-Security-Policy')/i.test(html), 'CSP présente dans index.html');
+    verifier(!/<style\b/i.test(html) && !/\sstyle\s*=/i.test(html) && !/\son[a-z]+\s*=/i.test(html), 'zéro balise <style> ou attribut inline style=/on*= dans index.html');
+    // Contexte isolé (sans écouteur console.error d'outils.js) pour tester le blocage actif
+    const { chromium } = require('playwright');
+    const nav = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
+    try {
+      const cIso = await nav.newContext();
+      await cIso.addInitScript(() => {
+        window.__cspProbe = [];
+        document.addEventListener('securitypolicyviolation', (e) => {
+          window.__cspProbe.push({ directive: e.violatedDirective, blocked: e.blockedURI || '' });
+        });
+      });
+      const pIso = await cIso.newPage();
+      await pIso.goto(adresse());
+      await pIso.waitForFunction(() => document.body.dataset.pret === 'oui');
+      const initViol = await pIso.evaluate(() => window.__cspProbe.length);
+      verifier(initViol === 0, 'zéro violation CSP au chargement initial', initViol);
+      await pIso.evaluate(() => {
+        const s = document.createElement('script');
+        s.textContent = 'window.__xssProbe = 1;';
+        document.head.appendChild(s);
+      });
+      await pIso.waitForTimeout(100);
+      const res = await pIso.evaluate(() => ({
+        xss: window.__xssProbe,
+        violations: window.__cspProbe.map((v) => v.directive)
+      }));
+      verifier(res.xss === undefined && res.violations.some((d) => d.startsWith('script-src')), 'CSP bloque activement un script inline injecté', res);
+    } finally {
+      await nav.close();
     }
   });
 
-  await section('Mise à jour depuis la version 1.0 : l’IA est gardée', async () => {
+  await section('Mise à jour depuis la version 1.0 : l’IA est gardée et omni-photo-ia-* exclu', async () => {
     // Un navigateur à part, tout neuf : premier chargement SANS service
     // worker (comme juste avant la mise à jour), avec la réserve telle que
-    // la laissait la version 1.0 (l'IA rangée avec le reste).
+    // la laissait la version 1.0 (l'IA rangée avec le reste), plus un cache
+    // omni-photo-ia-v0 (à supprimer sans migrer) et un cache d'une autre app.
     const { chromium } = require('playwright');
     const nav = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
     try {
@@ -223,18 +262,36 @@ lancer('Omni-Photo', async () => {
       await p2.evaluate(async () => {
         const vieux = await caches.open('omni-photo-v3');
         for (const f of ['./ort.wasm.bundle.min.mjs', './ort-wasm-simd-threaded.wasm', './u2netp.onnx']) await vieux.add(f);
+        const iaV0 = await caches.open('omni-photo-ia-v0');
+        await iaV0.put('./modnet.onnx', new Response('v0-modnet', { status: 200 }));
+        const autre = await caches.open('omni-video-v9');
+        await autre.put(location.origin + '/omni-video/app.js', new Response('video', { status: 200 }));
       });
       await ctx.unroute('**/sw.js');
       await p2.goto(adresse());
       await p2.waitForFunction(() => document.body.dataset.pret === 'oui');
       // (on vérifie toutes les secondes, pendant une minute au plus)
       for (let i = 0; i < 60; i++) {
-        const fini = await p2.evaluate(async () => !(await caches.keys()).includes('omni-photo-v3') && !!(await (await caches.open('omni-photo-ia-v1')).match('./u2netp.onnx')));
+        const fini = await p2.evaluate(async () => {
+          const cles = await caches.keys();
+          return !cles.includes('omni-photo-v3') && !cles.includes('omni-photo-ia-v0')
+            && !!(await (await caches.open('omni-photo-ia-v1')).match('./u2netp.onnx'));
+        });
         if (fini) break;
         await p2.waitForTimeout(1000);
       }
-      const reprise = await p2.evaluate(async () => ({ cles: await caches.keys(), manque: (await ModulesIA.manquants('objet')).length }));
+      const reprise = await p2.evaluate(async () => {
+        const cles = await caches.keys();
+        const ia = await caches.open('omni-photo-ia-v1');
+        return {
+          cles,
+          manque: (await ModulesIA.manquants('objet')).length,
+          modnetMigre: !!(await ia.match('./modnet.onnx'))
+        };
+      });
       verifier(!reprise.cles.includes('omni-photo-v3') && reprise.manque === 0, 'mise à jour depuis la 1.0 : l’IA déjà téléchargée est gardée (pas de nouveau téléchargement)', reprise);
+      verifier(!reprise.cles.includes('omni-photo-ia-v0') && !reprise.modnetMigre && reprise.cles.includes('omni-video-v9'),
+        'omni-photo-ia-v0 est supprimé sans migrer vers omni-photo-ia-v1 et les caches frères restent intacts', reprise);
     } finally {
       await nav.close();
     }
@@ -1265,7 +1322,7 @@ lancer('Omni-Photo', async () => {
     // Vérifier mon téléphone : le test de vitesse de l'IA
     await p.click('[data-action="accueil"]');
     await p.click('[data-action="voir-verifier"]');
-    await p.waitForSelector('#verif-liste li');
+    await p.waitForFunction(() => document.querySelectorAll('#verif-liste li').length >= 8, null, { timeout: 15000 });
     await p.click('[data-action="verif-vitesse"]');
     await p.waitForFunction(() => /Détourage d'essai|pas pu/.test(document.querySelector('#verif-vitesse-resultat').textContent), null, { timeout: 120000 });
     verifier(/Détourage d'essai : \d+,\d s \((rapide|correct|lent)/.test(await texte(p, '#verif-vitesse-resultat')), 'test de vitesse de l’IA', await texte(p, '#verif-vitesse-resultat'));
@@ -1476,20 +1533,16 @@ lancer('Omni-Photo', async () => {
     await p.waitForFunction(() => document.body.dataset.pret === 'oui' && !!navigator.serviceWorker.controller);
     const manifeste = JSON.parse(fs.readFileSync(path.join(RACINE, 'manifest.json'), 'utf8'));
     verifier(manifeste.share_target && manifeste.share_target.action === './partage' && manifeste.share_target.params.files[0].name === 'photos', 'le manifeste annonce Omni-Photo dans le menu « Partager »');
-    // Ce que fait Android : envoyer la photo à « ./partage »
+    // Ce que fait Android : envoyer la photo à « ./partage » (la CSP form-action 'none' bloque
+    // la soumission de <form> dans la page, on exerce donc directement la route POST du SW)
     const envoyer = (tailles) => p.evaluate(async (tailles) => {
-      const formulaire = document.createElement('form');
-      formulaire.method = 'POST'; formulaire.action = './partage'; formulaire.enctype = 'multipart/form-data';
-      const champ = document.createElement('input'); champ.type = 'file'; champ.name = 'photos'; champ.multiple = true;
-      const dt = new DataTransfer();
+      const fd = new FormData();
       for (const [l, h] of tailles) {
         const c = document.createElement('canvas'); c.width = l; c.height = h; c.getContext('2d').fillRect(0, 0, l, h);
-        dt.items.add(new File([await new Promise((ok) => c.toBlob(ok, 'image/png'))], `photo-${l}.png`, { type: 'image/png' }));
+        fd.append('photos', new File([await new Promise((ok) => c.toBlob(ok, 'image/png'))], `photo-${l}.png`, { type: 'image/png' }));
       }
-      champ.files = dt.files;
-      formulaire.append(champ);
-      document.body.append(formulaire);
-      formulaire.submit();
+      await fetch('./partage', { method: 'POST', body: fd, redirect: 'manual' });
+      location.assign('./index.html?partage=' + Date.now() + '#partage');
     }, tailles);
     await Promise.all([p.waitForNavigation(), envoyer([[640, 480]])]);
     await p.waitForFunction(() => document.body.dataset.pret === 'oui');
@@ -1808,7 +1861,7 @@ lancer('Omni-Photo', async () => {
     verifier(await p.evaluate(() => document.querySelector('input[name="i-papier"][value="10x15"]').checked), 'le dernier papier choisi est retenu');
     await p.click('[data-action="imprimer"]');
     await p.waitForFunction(() => window.__imprime === 1);
-    const prep = await p.evaluate(() => ({ src: document.querySelector('#impression img').src, page: document.querySelector('#style-impression').textContent, ouverte: document.querySelector('#fenetre-impression').open }));
+    const prep = await p.evaluate(() => ({ src: document.querySelector('#impression img').src, page: Impression._feuillePage ? [...Impression._feuillePage.cssRules].map((r) => r.cssText).join(' ') : '', ouverte: document.querySelector('#fenetre-impression').open }));
     verifier(prep.src.startsWith('blob:') && prep.page.includes('size: 150mm 100mm') && !prep.ouverte, '« Imprimer… » prépare la feuille et ouvre l’impression', prep);
     const imprime = await p.pdf({ preferCSSPageSize: true, printBackground: true });
     const ti = imprime.toString('latin1');
@@ -1843,7 +1896,340 @@ lancer('Omni-Photo', async () => {
     await attendre(p, 300);
     verifier((await etat(p)).vue === 'accueil', 'le bouton retour du téléphone ramène à l’accueil');
   });
+  await verifierCsp(p);
   await ctx.close();
+
+  await section('Régression sauvegarde .omniphoto, WebP, sécurité import et CSS.escape', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    // 1. Toile blanche (ressource issue de toile -> encodage WebP dans IndexedDB + .omniphoto)
+    await p.click('[data-action="ouvrir-toile"]');
+    await p.click('label.choix:has(input[name="f-fond"][value="blanc"])');
+    await p.click('[data-action="creer-toile"]');
+    await attendreFin(p);
+    await p.click('[data-action="accueil"]');
+    await p.waitForSelector('#liste-montages .ouvrir-montage');
+    const infoWebp = await p.evaluate(async () => {
+      await Sauvegarde.maintenant();
+      const mid = (await Sauvegarde.liste())[0].id;
+      const m = await Base.lire('montages', mid);
+      const rid = m.ressources[0];
+      const im = await Base.lire('images', rid);
+      return { mid, rid, type: im && im.blob && im.blob.type };
+    });
+    verifier(infoWebp.type === 'image/webp', 'ressource issue de toile stockée en image/webp dans IndexedDB', infoWebp);
+
+    // 2. Repli PNG de _versFichier si WebP non produit
+    const repliPng = await p.evaluate(async () => {
+      const orig = HTMLCanvasElement.prototype.toBlob;
+      HTMLCanvasElement.prototype.toBlob = function (cb, type, q) {
+        if (type === 'image/webp') return orig.call(this, cb, 'image/png', q);
+        return orig.call(this, cb, type, q);
+      };
+      try {
+        const c = document.createElement('canvas'); c.width = 12; c.height = 12;
+        return (await Sauvegarde._versFichier(c)).type;
+      } finally {
+        HTMLCanvasElement.prototype.toBlob = orig;
+      }
+    });
+    verifier(repliPng === 'image/png', 'Sauvegarde._versFichier se replie sur image/png si WebP indisponible', repliPng);
+
+    // 3. Rejets durcis (.omniphoto détournant rid existant, MIME SVG, rollback Base.ecrire)
+    const rejets = await p.evaluate(async (ridExistant) => {
+      const mk = (obj, extra = new Uint8Array([1, 2, 3])) => {
+        const txt = new TextEncoder().encode(JSON.stringify(obj));
+        const len = new Uint8Array(4);
+        new DataView(len.buffer).setUint32(0, txt.length, true);
+        return new Blob(['OMNIPHOTO-MONTAGE-1\n', len, txt, extra], { type: 'application/octet-stream' });
+      };
+      const avant = (await Base.cles('montages')).length;
+      let hijackRejete = false, svgRejete = false, rollbackOk = false;
+      try {
+        await Sauvegarde.depuisFichier(mk({
+          nom: 'Hijack',
+          doc: { largeur: 100, hauteur: 100, calques: [{ id: 'c1', type: 'image', x: 50, y: 50, echelle: 1, rotation: 0, opacite: 1, ressource: ridExistant, largeur: 10, hauteur: 10 }] },
+          fichiers: [{ id: 'f1', taille: 3, type: 'image/png' }]
+        }));
+      } catch (e) { hijackRejete = true; }
+      try {
+        await Sauvegarde.depuisFichier(mk({
+          nom: 'Svg',
+          doc: { largeur: 100, hauteur: 100, calques: [{ id: 'c1', type: 'image', x: 50, y: 50, echelle: 1, rotation: 0, opacite: 1, ressource: 'f1', largeur: 10, hauteur: 10 }] },
+          fichiers: [{ id: 'f1', taille: 3, type: 'image/svg+xml' }]
+        }));
+      } catch (e) { svgRejete = true; }
+      const origEcrire = Base.ecrire.bind(Base);
+      Base.ecrire = async (tiroir, cle, val) => {
+        if (tiroir === 'montages') throw new Error('QuotaExceededError');
+        return origEcrire(tiroir, cle, val);
+      };
+      const imAvant = (await Base.cles('images')).length;
+      try {
+        await Sauvegarde.depuisFichier(mk({
+          nom: 'Rollback',
+          doc: { largeur: 100, hauteur: 100, calques: [{ id: 'c1', type: 'image', x: 50, y: 50, echelle: 1, rotation: 0, opacite: 1, ressource: 'f1', largeur: 10, hauteur: 10 }] },
+          fichiers: [{ id: 'f1', taille: 3, type: 'image/png' }]
+        }));
+      } catch (e) { /* attendu */ }
+      Base.ecrire = origEcrire;
+      rollbackOk = (await Base.cles('montages')).length === avant && (await Base.cles('images')).length === imAvant;
+      return { hijackRejete, svgRejete, rollbackOk };
+    }, infoWebp.rid);
+    verifier(rejets.hijackRejete && rejets.svgRejete && rejets.rollbackOk, 'import .omniphoto rejette détournement/SVG et annule les écritures IndexedDB sur échec', rejets);
+
+    // 4. XSS dans nom/texte + ID spécial CSS.escape
+    const specialId = 'm"test\\special]';
+    const xssNom = '<img src=x onerror="window.__xssNom=1">';
+    await p.evaluate(async ({ specialId, xssNom, mid }) => {
+      const m = await Base.lire('montages', mid);
+      await Base.ecrire('montages', specialId, { ...m, id: specialId, nom: xssNom });
+      await Accueil.majListe();
+    }, { specialId, xssNom, mid: infoWebp.mid });
+    const xssCheck = await p.evaluate(() => ({
+      imgsInList: document.querySelectorAll('#liste-montages img[src="x"]').length,
+      xssVar: window.__xssNom
+    }));
+    verifier(xssCheck.imgsInList === 0 && xssCheck.xssVar === undefined, 'le nom du montage est rendu via textContent (zéro XSS)', xssCheck);
+    await p.click(`[data-action="montage-renommer"][data-id=${JSON.stringify(specialId)}]`);
+    await p.fill('#nom-montage', 'Nom échappé');
+    await p.click('#fenetre-nom button[type="submit"]');
+    await p.waitForTimeout(400);
+    const [dlSp] = await Promise.all([
+      p.waitForEvent('download'),
+      p.click(`[data-action="montage-fichier"][data-id=${JSON.stringify(specialId)}]`)
+    ]);
+    verifier(dlSp.suggestedFilename().endsWith('.omniphoto'), 'CSS.escape permet renommer + exporter un ID spécial', dlSp.suggestedFilename());
+    await verifierCsp(p);
+    await t.ctx.close();
+  });
+
+  await section('Régression des 4 correctifs éditeur (cacher, correcteur, panneaux, recadrage)', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    // Image contrastée 600x400 pour tester cacher, correcteur, panneaux, recadrage
+    const imgBuf = Buffer.from(await p.evaluate(async () => {
+      const c = document.createElement('canvas'); c.width = 600; c.height = 400; const x = c.getContext('2d');
+      x.fillStyle = '#557799'; x.fillRect(0, 0, 600, 400);
+      for (let y = 120; y < 280; y += 10) for (let px = 220; px < 380; px += 10) {
+        x.fillStyle = ((px + y) / 10) % 2 ? '#ffffff' : '#111111';
+        x.fillRect(px, y, 10, 10);
+      }
+      const b = await new Promise((ok) => c.toBlob(ok, 'image/png'));
+      return [...new Uint8Array(await b.arrayBuffer())];
+    }));
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'editeur.png', mimeType: 'image/png', buffer: imgBuf });
+    await attendreFin(p);
+
+    // 4a. Cacher : validation immédiate pendant le debounce 150ms + repli flou Safari
+    await p.evaluate(() => {
+      const c = Montage.doc.calques[0];
+      const r = Ressources.obtenir(c.ressource);
+      const s = document.createElement('canvas'); s.width = r.largeur; s.height = r.hauteur;
+      s.getContext('2d').drawImage(r.image, 0, 0);
+      Montage.modifier(c.id, { source: Ressources.depuisToile(s) });
+    });
+    await toucherOutil(p, 'outil-cacher');
+    const c1 = await versEcran(p, 220, 120), c2 = await versEcran(p, 380, 280);
+    await doigts(p, [['pointerdown', 1, c1.x, c1.y], ['pointermove', 1, c2.x, c2.y], ['pointerup', 1, c2.x, c2.y]]);
+    const resCacher = await p.evaluate(() => {
+      const av = OutilCacher.taille(OutilCacher.zones[0], 600, 400);
+      const r = document.querySelector('#ca-force');
+      r.value = '10';
+      r.dispatchEvent(new Event('input', { bubbles: true }));
+      const timerActif = !!OutilCacher._minuteurCalcul;
+      document.querySelector('[data-action="cacher-valider"]').click();
+      const calque = Montage.doc.calques[0];
+      const imRes = Ressources.obtenir(calque.ressource).image;
+      const imSrc = Ressources.obtenir(calque.source).image;
+      const d1 = document.createElement('canvas'); d1.width = 600; d1.height = 400; d1.getContext('2d').drawImage(imRes, 0, 0);
+      const d2 = document.createElement('canvas'); d2.width = 600; d2.height = 400; d2.getContext('2d').drawImage(imSrc, 0, 0);
+      const p1 = d1.getContext('2d').getImageData(250, 150, 1, 1).data;
+      const p2 = d2.getContext('2d').getImageData(250, 150, 1, 1).data;
+      return { timerActif, timerApres: OutilCacher._minuteurCalcul, outil: Editeur.outil, remp: Rendu.remplacements.size, ap: OutilCacher.taille({ points: [{ x: 220, y: 120 }, { x: 380, y: 280 }] }, 600, 400), av, sameSrc: p1.join() === p2.join() };
+    });
+    verifier(resCacher.timerActif && resCacher.timerApres === null && resCacher.outil === null && resCacher.remp === 0 && resCacher.ap > resCacher.av && resCacher.sameSrc,
+      'cacher : valider pendant debounce 150ms recalcule ressource + source à la nouvelle force', resCacher);
+
+    // Repli Safari sans ctx.filter pour OutilCacher (flou)
+    await toucherOutil(p, 'outil-cacher');
+    await p.click('label.choix:has(input[name="ca-effet"][value="flou"])');
+    const cSaf = await p.evaluate(() => {
+      const desc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'filter');
+      delete CanvasRenderingContext2D.prototype.filter;
+      try {
+        OutilCacher.zones.push({ points: [{ x: 220, y: 120 }, { x: 380, y: 120 }, { x: 380, y: 280 }, { x: 220, y: 280 }] });
+        OutilCacher._calculer();
+        const ok = !!OutilCacher.travail && !supporteFiltreToile(OutilCacher.travail.getContext('2d'));
+        OutilCacher.fermer();
+        return ok;
+      } finally {
+        if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc);
+      }
+    });
+    verifier(cSaf, 'cacher : repli flou Safari sans ctx.filter fonctionne sans erreur', cSaf);
+
+    // 4b. Correcteur : retirerDernier + OOM 1er trait + OOM partiel 2e trait + OOM replay
+    await toucherOutil(p, 'outil-correcteur');
+    const cr1 = await versEcran(p, 100, 100), cr2 = await versEcran(p, 300, 200);
+    await doigts(p, [['pointerdown', 1, cr1.x, cr1.y], ['pointerup', 1, cr1.x, cr1.y]]);
+    await doigts(p, [['pointerdown', 1, cr2.x, cr2.y], ['pointerup', 1, cr2.x, cr2.y]]);
+    const crRes = await p.evaluate(() => {
+      const n2 = OutilCorrecteur.operations.length;
+      const avantT2 = [...OutilCorrecteur.travail.getContext('2d').getImageData(0, 0, 600, 400).data];
+      // Simuler OOM sur travailSource pour un 3e trait -> restauration exacte
+      const orig = OutilCorrecteur._appliquerEffacer.bind(OutilCorrecteur);
+      OutilCorrecteur._appliquerEffacer = function (toile, tr) {
+        if (toile === this.travailSource) throw new Error('OOM source');
+        return orig(toile, tr);
+      };
+      OutilCorrecteur.appui({ x: 150, y: 150 });
+      OutilCorrecteur.relache();
+      const nApresOom = OutilCorrecteur.operations.length;
+      const apresT2 = [...OutilCorrecteur.travail.getContext('2d').getImageData(0, 0, 600, 400).data];
+      const identique = avantT2.length === apresT2.length && avantT2.every((v, i) => v === apresT2[i]);
+      OutilCorrecteur._appliquerEffacer = () => { throw new Error('OOM replay'); };
+      const retOk = OutilCorrecteur.retirerDernier();
+      const nFinal = OutilCorrecteur.operations.length;
+      const travailFinal = OutilCorrecteur.travail;
+      OutilCorrecteur._appliquerEffacer = orig;
+      OutilCorrecteur.fermer();
+      return { n2, nApresOom, identique, retOk, nFinal, travailFinal };
+    });
+    verifier(crRes.n2 === 2 && crRes.nApresOom === 2 && crRes.identique && crRes.retOk && crRes.nFinal === 0 && crRes.travailFinal === null,
+      'correcteur : rollback atomique OOM partiel et try/catch sur retirerDernier()', crRes);
+
+    // 4c. Panneaux : texte > 40% préservé à travers couleur / nuancier / police / align / gras
+    await p.evaluate(() => {
+      Historique.action(() => {
+        const c = Montage.ajouterTexte('Grand');
+        const echelle85 = (0.85 * Math.min(Montage.doc.largeur, Montage.doc.hauteur)) / c.taille;
+        Montage.modifier(c.id, { echelle: echelle85 });
+      });
+    });
+    await p.click('[data-action="modifier-texte"]');
+    await p.waitForFunction(() => document.querySelector('#fenetre-texte').open);
+    const echelleAvant = await p.evaluate(() => Montage.calqueChoisi().echelle);
+    const maxSlider = await p.$eval('#t-taille', (el) => Number(el.max));
+    await p.$eval('#t-couleur', (el) => { el.value = '#e4572e'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    await p.click('#fenetre-texte .nuancier[data-cible="t-couleur"] .pastille:nth-child(4)');
+    await p.click('label.choix-police:has(input[value="satisfy"])');
+    await p.click('label.choix:has(input[name="t-align"][value="gauche"])');
+    await p.click('#t-gras');
+    const echelleApres = await p.evaluate(() => Montage.calqueChoisi().echelle);
+    verifier(maxSlider >= 85 && echelleApres === echelleAvant, 'panneaux : échelle texte > 40% conservée après couleur/nuancier/police/align/gras', { maxSlider, echelleAvant, echelleApres });
+    await p.$eval('#t-taille', (el) => { el.value = '60'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    await p.click('#fenetre-texte [data-action="fermer-fenetre"]');
+    const echelle60 = await p.evaluate(() => {
+      const c = Montage.calqueChoisi();
+      return Math.round((c.taille * c.echelle) / Math.min(Montage.doc.largeur, Montage.doc.hauteur) * 100);
+    });
+    verifier(Math.abs(echelle60 - 60) <= 1, 'panneaux : curseur #t-taille met à jour l’échelle à 60%', echelle60);
+
+    // 4d. Recadrage : excentré + redresser + fermer (Historique.fin) + non-couvrant
+    await toucherOutil(p, 'outil-recadrage');
+    const recRes = await p.evaluate(() => {
+      const passeAvant = Historique.passe.length;
+      const r = document.querySelector('#rc-redresser');
+      r.value = '10'; r.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('#outil-recadrage [data-action="outil-fermer"]').click();
+      return {
+        avant: Historique._avant,
+        passeApres: Historique.passe.length,
+        passeAvant,
+        rotation: Montage.doc.calques[0].rotation
+      };
+    });
+    verifier(recRes.avant === null && recRes.passeApres === recRes.passeAvant + 1 && recRes.rotation === 10,
+      'recadrage : fermer() valide Historique.fin() après redresser()', recRes);
+    await p.click('[data-action="annuler"]');
+    verifier((await etat(p)).doc.calques[0].rotation === 0, 'recadrage : Annuler remet rotation à 0');
+
+    const nonCouv = await p.evaluate(() => {
+      Montage.nouveau(400, 400);
+      const toile = document.createElement('canvas'); toile.width = 100; toile.height = 100;
+      toile.getContext('2d').fillRect(0, 0, 100, 100);
+      const c = Montage.ajouterImage(Ressources.depuisToile(toile), 100, 100);
+      Montage.modifier(c.id, { echelle: 1, x: 350, y: 200, rotation: 0 });
+      OutilRecadrage.ouvrir();
+      OutilRecadrage.redresser(10);
+      OutilRecadrage.tourner(1);
+      OutilRecadrage.redresser(12);
+      OutilRecadrage.fermer();
+      const k = Montage.doc.calques[0];
+      return { x: k.x, y: k.y, echelle: k.echelle, rotation: k.rotation, avant: Historique._avant };
+    });
+    verifier(nonCouv.x === 200 && nonCouv.y === 350 && nonCouv.echelle === 1 && nonCouv.rotation === 102 && nonCouv.avant === null,
+      'recadrage : calque ne couvrant pas le centre préserve sa position et echelle=1', nonCouv);
+
+    await verifierCsp(p);
+    await t.ctx.close();
+  });
+
+  await section('Navigation directe #apropos / #verifier et bouton Retour', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p1 = await t.ctx.newPage();
+    await p1.goto(adresse() + '#apropos');
+    await p1.waitForFunction(() => document.body.dataset.pret === 'oui' && document.body.dataset.vue === 'apropos');
+    await p1.click('section[data-vue="apropos"] [data-action="retour"]');
+    await p1.waitForTimeout(200);
+    const st1 = await p1.evaluate(() => ({ vue: document.body.dataset.vue, hash: location.hash }));
+    verifier(st1.vue === 'accueil' && st1.hash === '', 'accès direct #apropos : Retour mène à l’accueil sans quitter le site', st1);
+
+    const p2 = await t.ctx.newPage();
+    await p2.goto(adresse() + '#verifier');
+    await p2.waitForFunction(() => document.body.dataset.pret === 'oui' && document.body.dataset.vue === 'verifier');
+    await p2.click('section[data-vue="verifier"] [data-action="retour"]');
+    await p2.waitForTimeout(200);
+    const st2 = await p2.evaluate(() => ({ vue: document.body.dataset.vue, hash: location.hash }));
+    verifier(st2.vue === 'accueil' && st2.hash === '', 'accès direct #verifier : Retour mène à l’accueil sans quitter le site', st2);
+    await verifierCsp(p1);
+    await verifierCsp(p2);
+    await t.ctx.close();
+  });
+
+  await section('Libération du travailleur IA au changement et à la suppression de montage', async () => {
+    const t = await nouvellePage(sansGuide);
+    const p = t.p;
+    await p.waitForFunction(() => document.body.dataset.pret === 'oui');
+    await p.evaluate(() => {
+      window.__termCount = 0;
+      const orig = Worker.prototype.terminate;
+      Worker.prototype.terminate = function () {
+        window.__termCount++;
+        return orig.call(this);
+      };
+    });
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'a.jpg', mimeType: 'image/jpeg', buffer: await fabriquerImage(p, 300, 200) });
+    await attendreFin(p);
+    await p.evaluate(() => {
+      Detourage._travail();
+      Export._pret = { factice: true };
+    });
+    await p.click('[data-action="accueil"]');
+    await p.waitForTimeout(300);
+    await donnerFichier(p, '[data-action="ouvrir-galerie"]', { name: 'b.jpg', mimeType: 'image/jpeg', buffer: await fabriquerImage(p, 300, 200) });
+    await attendreFin(p);
+    const switchState = await p.evaluate(() => ({
+      terms: window.__termCount,
+      trav: Detourage._travailleur,
+      timer: Detourage._minuteurInactivite,
+      exportPret: Export._pret
+    }));
+    verifier(switchState.terms >= 1 && switchState.trav === null && switchState.timer === null && switchState.exportPret === null,
+      'changement de montage termine le Worker IA et libère Export._pret', switchState);
+
+    await p.evaluate(async () => {
+      Detourage._travail();
+      await Sauvegarde.supprimer(Montage.id);
+    });
+    const delState = await p.evaluate(() => ({ terms: window.__termCount, trav: Detourage._travailleur }));
+    verifier(delState.terms >= 2 && delState.trav === null, 'suppression du montage actif termine le Worker IA', delState);
+    await verifierCsp(p);
+    await t.ctx.close();
+  });
 
   // ---------------- Tablette en paysage ----------------
   await section('Tablette en paysage', async () => {

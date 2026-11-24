@@ -13,7 +13,7 @@ Application de l'Omni-système, par Ferrus Dantioch.
 
 ## Ce que fait l'application
 
-État actuel : **version 1.3.0** (les trois étapes du plan, deux séries de 11 améliorations, puis « Cacher » et « Imprimer »).
+État actuel : **version 1.3.1** (les trois étapes du plan, deux séries de 11 améliorations, puis « Cacher » et « Imprimer »).
 
 | Fonction | État |
 |---|---|
@@ -70,10 +70,10 @@ Ensuite, tout marche sans internet, détourage compris. La page « À propos »
 permet de supprimer ces fichiers pour libérer de la place.
 
 Les outils sont rangés en trois onglets : **Ajouter** (texte, image, forme,
-calques), **Retoucher** (recadrer, lumière, yeux rouges, découpe) et
-**Détourage** (retirer le fond, pinceau, nouveau fond, flou du fond). Les messages
-d'erreur (format non pris en charge comme le HEIC, fichier vide, manque de
-mémoire…) sont en français et expliquent quoi faire.
+calques, signature), **Retoucher** (recadrer, lumière, yeux rouges, découpe,
+correcteur, cacher) et **Détourage** (retirer le fond, pinceau, nouveau fond,
+flou du fond). Les messages d'erreur (format non pris en charge comme le HEIC,
+fichier vide, manque de mémoire…) sont en français et expliquent quoi faire.
 
 ## Tester sur votre téléphone
 
@@ -162,6 +162,7 @@ Tous les fichiers sont à la racine (plus simple à envoyer depuis un téléphon
 | `index.html` | la page : écrans, boutons, fenêtres |
 | `styles.css` | l'apparence (couleurs du thème Omni-système) |
 | `app.js` | le chef d'orchestre : écrans, boutons, ouverture des photos, mises à jour |
+| `outils.js` | les petits outils communs (sélecteurs, messages, boutons, flou de secours) |
 | `montage.js` | le montage (les calques) et « Annuler / Rétablir » |
 | `ressources.js` | l'ouverture des images, en toute sécurité (formats, taille, mémoire) |
 | `rendu.js` | le dessin du montage (le même à l'écran et dans le fichier exporté) |

@@ -141,11 +141,14 @@ const Rendu = {
         ctx.globalAlpha = alpha;
       }
       if (image) {
-        if (Effets.actif(c)) Effets.dessinerImage(ctx, c, image, filtre, !!options.ecran);
-        else {
+        if (Effets.actif(c)) Effets.dessinerImage(ctx, c, image, filtre, !!options.ecran && !options.miniature);
+        else if (filtre === 'none') ctx.drawImage(image, -c.largeur / 2, -c.hauteur / 2, c.largeur, c.hauteur);
+        else if (supporteFiltreToile(ctx)) {
           ctx.filter = filtre;
           ctx.drawImage(image, -c.largeur / 2, -c.hauteur / 2, c.largeur, c.hauteur);
           ctx.filter = 'none';
+        } else {
+          Lumiere.dessinerAvecFiltre(ctx, image, -c.largeur / 2, -c.hauteur / 2, c.largeur, c.hauteur, c.reglages, !!options.ecran && !options.miniature);
         }
       }
     } else if (c.type === 'texte') {

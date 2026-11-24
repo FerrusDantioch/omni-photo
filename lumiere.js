@@ -79,6 +79,106 @@ const Lumiere = {
       svg.append(filtre);
     }
     return id;
+  },
+
+  _cachePixels: new WeakMap(),
+
+  _appliquerPixels(d, r) {
+    const preset = FILTRES[r.filtre] || FILTRES.aucun;
+    const chaleur = limiter((r.chaleur || 0) + (preset.chaleur || 0), -100, 100);
+    const cran = Math.round(chaleur / 5) * 5;
+    const etapes = [];
+    if (cran) {
+      const k = Math.abs(cran) / 100;
+      const [mr, mg, mb] = cran > 0 ? [1 + 0.14 * k, 1 + 0.03 * k, 1 - 0.2 * k] : [1 - 0.16 * k, 1 + 0.02 * k, 1 + 0.18 * k];
+      etapes.push({ type: 'diag', mr, mg, mb });
+    }
+    if (r.lumiere) etapes.push({ type: 'lumiere', v: Math.max(0, 1 + r.lumiere * 0.005) });
+    if (r.contraste) etapes.push({ type: 'contraste', v: Math.max(0, 1 + r.contraste * 0.006) });
+    if (r.saturation) etapes.push({ type: 'saturation', v: Math.max(0, 1 + r.saturation * 0.01) });
+    if (preset.css) {
+      const re = /([a-z-]+)\(([^)]+)\)/gi;
+      let m;
+      while ((m = re.exec(preset.css))) {
+        const fn = m[1].toLowerCase(), val = parseFloat(m[2]);
+        if (!Number.isFinite(val)) continue;
+        if (fn === 'grayscale') etapes.push({ type: 'saturation', v: 1 - limiter(val, 0, 1) });
+        else if (fn === 'sepia') etapes.push({ type: 'sepia', v: limiter(val, 0, 1) });
+        else if (fn === 'contrast') etapes.push({ type: 'contraste', v: Math.max(0, val) });
+        else if (fn === 'saturate') etapes.push({ type: 'saturation', v: Math.max(0, val) });
+        else if (fn === 'brightness') etapes.push({ type: 'lumiere', v: Math.max(0, val) });
+      }
+    }
+    if (!etapes.length) return;
+    const clamp = (v) => (v < 0 ? 0 : (v > 255 ? 255 : v));
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      let R = d[i], G = d[i + 1], B = d[i + 2];
+      for (const e of etapes) {
+        if (e.type === 'diag') {
+          R = clamp(R * e.mr); G = clamp(G * e.mg); B = clamp(B * e.mb);
+        } else if (e.type === 'lumiere') {
+          R = clamp(R * e.v); G = clamp(G * e.v); B = clamp(B * e.v);
+        } else if (e.type === 'contraste') {
+          R = clamp((R - 127.5) * e.v + 127.5);
+          G = clamp((G - 127.5) * e.v + 127.5);
+          B = clamp((B - 127.5) * e.v + 127.5);
+        } else if (e.type === 'saturation') {
+          const s = e.v;
+          const nr = clamp((0.213 + 0.787 * s) * R + (0.715 - 0.715 * s) * G + (0.072 - 0.072 * s) * B);
+          const ng = clamp((0.213 - 0.213 * s) * R + (0.715 + 0.285 * s) * G + (0.072 - 0.072 * s) * B);
+          const nb = clamp((0.213 - 0.213 * s) * R + (0.715 - 0.715 * s) * G + (0.072 + 0.928 * s) * B);
+          R = nr; G = ng; B = nb;
+        } else if (e.type === 'sepia') {
+          const t = 1 - e.v;
+          const nr = clamp((0.393 + 0.607 * t) * R + (0.769 - 0.769 * t) * G + (0.189 - 0.189 * t) * B);
+          const ng = clamp((0.349 - 0.349 * t) * R + (0.686 + 0.314 * t) * G + (0.168 - 0.168 * t) * B);
+          const nb = clamp((0.272 - 0.272 * t) * R + (0.534 - 0.534 * t) * G + (0.131 + 0.869 * t) * B);
+          R = nr; G = ng; B = nb;
+        }
+      }
+      d[i] = Math.round(R);
+      d[i + 1] = Math.round(G);
+      d[i + 2] = Math.round(B);
+    }
+  },
+
+  dessinerAvecFiltre(ctx, image, x, y, l, h, reglages, garder = false) {
+    if (!reglages || this.neutre(reglages)) {
+      ctx.drawImage(image, x, y, l, h);
+      return;
+    }
+    const cle = this.filtre(reglages);
+    if (garder) {
+      const entree = this._cachePixels.get(image);
+      if (entree && entree.cle === cle) {
+        ctx.drawImage(entree.toile, x, y, l, h);
+        return;
+      }
+    }
+    const iw = image.width, ih = image.height;
+    if (!iw || !ih) return;
+    let toile = null;
+    try {
+      const cree = nouvelleToile(iw, ih);
+      toile = cree.toile;
+      const ct = cree.ctx;
+      ct.drawImage(image, 0, 0);
+      const img = ct.getImageData(0, 0, iw, ih);
+      this._appliquerPixels(img.data, reglages);
+      ct.putImageData(img, 0, 0);
+      if (garder) {
+        const precedent = this._cachePixels.get(image);
+        if (precedent && precedent.toile) precedent.toile.width = precedent.toile.height = 0;
+        this._cachePixels.set(image, { cle, toile });
+        ctx.drawImage(toile, x, y, l, h);
+        toile = null;
+      } else {
+        ctx.drawImage(toile, x, y, l, h);
+      }
+    } finally {
+      if (toile) toile.width = toile.height = 0;
+    }
   }
 };
 
@@ -104,7 +204,7 @@ const OutilLumiere = {
   _remplir() {
     const r = this._reglages();
     for (const k of ['lumiere', 'contraste', 'saturation', 'chaleur']) $('#lu-' + k).value = r[k];
-    ($(`input[name="lu-filtre"][value="${r.filtre}"]`) || $('input[name="lu-filtre"]')).checked = true;
+    ($(`input[name="lu-filtre"][value="${CSS.escape(String(r.filtre))}"]`) || $('input[name="lu-filtre"]')).checked = true;
     this.majPanneau();
   },
 

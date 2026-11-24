@@ -19,22 +19,30 @@ const OutilFlou = {
   calque: null,
   base: null,       // l'image d'origine (nette)
   masque: null,     // toile : son opacité = le sujet
+  _masquePropre: false,
   apercu: null,     // l'aperçu (taille écran)
   voirOriginal: false,
   _calcul: false,
+  _minuteur: null,
 
   commencer(c) {
+    clearTimeout(this._minuteur);
+    this._minuteur = null;
+    if (this.apercu) this.apercu.width = this.apercu.height = 0;
+    if (this.masque && this._masquePropre) this.masque.width = this.masque.height = 0;
     this.calque = c;
     this.apercu = null;
     this.masque = null;
+    this._masquePropre = false;
     this.voirOriginal = false;
-    const choix = $(`input[name="fl-modele"][value="${Detourage.modelePrefere()}"]`);
+    const choix = $(`input[name="fl-modele"][value="${CSS.escape(String(Detourage.modelePrefere()))}"]`);
     if (choix) choix.checked = true;
     // Déjà détourée : l'origine est la photo, l'image actuelle donne le sujet
     if (c.source && Ressources.obtenir(c.source)) {
       this.base = Ressources.obtenir(c.source);
       this.masque = Ressources.obtenir(c.ressource).image;
-      setTimeout(() => this._majApercu(), 0);
+      this._masquePropre = false;
+      this._minuteur = setTimeout(() => this._majApercu(), 0);
     } else {
       this.base = Ressources.obtenir(c.ressource);
     }
@@ -66,9 +74,14 @@ const OutilFlou = {
       return m;
     });
     this._calcul = false;
-    if (Editeur.outil !== this || this.calque !== c) return;
+    if (Editeur.outil !== this || this.calque !== c) {
+      if (masque) masque.width = masque.height = 0;
+      return;
+    }
     if (!masque) { this.majPanneau(); return; }
+    if (this.masque && this._masquePropre) this.masque.width = this.masque.height = 0;
     this.masque = masque;
+    this._masquePropre = true;
     this._majApercu();
   },
 
@@ -77,30 +90,35 @@ const OutilFlou = {
     const base = this.base.image;
     const r = this.rayon(this.base.largeur) * (l / this.base.largeur);
     const { toile, ctx } = nouvelleToile(l, h);
-    ctx.imageSmoothingQuality = 'high';
-    // 1. La photo nette dessous (pour que les bords de l'image ne deviennent
-    //    pas transparents), puis toute la photo floutée.
-    ctx.drawImage(base, 0, 0, l, h);
-    ctx.filter = `blur(${r}px)`;
-    ctx.drawImage(base, 0, 0, l, h);
-    ctx.filter = 'none';
-    // 2. Le fond seul (sans le sujet), flouté : ses couleurs sont justes
-    //    jusqu'au bord du sujet.
-    const { toile: fond, ctx: cf } = nouvelleToile(l, h);
-    cf.drawImage(base, 0, 0, l, h);
-    cf.globalCompositeOperation = 'destination-out';
-    cf.drawImage(this.masque, 0, 0, l, h);
-    ctx.filter = `blur(${r}px)`;
-    ctx.drawImage(fond, 0, 0);
-    ctx.filter = 'none';
-    // 3. Le sujet net par-dessus
-    cf.globalCompositeOperation = 'copy';
-    cf.drawImage(base, 0, 0, l, h);
-    cf.globalCompositeOperation = 'destination-in';
-    cf.drawImage(this.masque, 0, 0, l, h);
-    ctx.drawImage(fond, 0, 0);
-    fond.width = 0;
-    return toile;
+    let fond = null;
+    try {
+      ctx.imageSmoothingQuality = 'high';
+      // 1. La photo nette dessous (pour que les bords de l'image ne deviennent
+      //    pas transparents), puis toute la photo floutée.
+      ctx.drawImage(base, 0, 0, l, h);
+      dessinerAvecFlou(ctx, base, 0, 0, l, h, r);
+      // 2. Le fond seul (sans le sujet), flouté : ses couleurs sont justes
+      //    jusqu'au bord du sujet.
+      const cree = nouvelleToile(l, h);
+      fond = cree.toile;
+      const cf = cree.ctx;
+      cf.drawImage(base, 0, 0, l, h);
+      cf.globalCompositeOperation = 'destination-out';
+      cf.drawImage(this.masque, 0, 0, l, h);
+      dessinerAvecFlou(ctx, fond, 0, 0, l, h, r);
+      // 3. Le sujet net par-dessus
+      cf.globalCompositeOperation = 'copy';
+      cf.drawImage(base, 0, 0, l, h);
+      cf.globalCompositeOperation = 'destination-in';
+      cf.drawImage(this.masque, 0, 0, l, h);
+      ctx.drawImage(fond, 0, 0);
+      return toile;
+    } catch (e) {
+      toile.width = toile.height = 0;
+      throw e;
+    } finally {
+      if (fond) fond.width = fond.height = 0;
+    }
   },
 
   /* L'aperçu, à la taille de l'écran (rapide pendant qu'on règle la force). */
@@ -162,10 +180,14 @@ const OutilFlou = {
   },
 
   fermer() {
+    clearTimeout(this._minuteur);
+    this._minuteur = null;
     if (Detourage._enCours) Detourage.arreter();
-    if (this.apercu) this.apercu.width = 0;
+    if (this.apercu) this.apercu.width = this.apercu.height = 0;
+    if (this.masque && this._masquePropre) this.masque.width = this.masque.height = 0;
     this.apercu = null;
     this.masque = null;
+    this._masquePropre = false;
     this.base = null;
     Rendu.remplacements.clear();
     if (Editeur.outil === this) Editeur.choisirOutil(null);

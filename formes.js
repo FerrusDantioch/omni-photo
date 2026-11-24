@@ -165,7 +165,7 @@ const FenetreForme = {
     if (!c || c.type !== 'forme') return;
     this._id = id;
     if (!nouvelle) Historique.debut();
-    $(`input[name="fo-forme"][value="${c.forme}"]`).checked = true;
+    ($(`input[name="fo-forme"][value="${CSS.escape(String(c.forme))}"]`) || $('input[name="fo-forme"]')).checked = true;
     $('#fo-remplir').checked = c.remplissage.actif;
     $('#fo-couleur').value = c.remplissage.couleur;
     $('#fo-trait').checked = c.trait.actif;

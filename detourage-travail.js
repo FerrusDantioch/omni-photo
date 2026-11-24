@@ -151,23 +151,41 @@ async function detourer({ modele, entree, largeurEntree: cl, hauteurEntree: ch, 
 
   // 1. Le modèle cherche le sujet
   const debut = performance.now();
-  const tenseur = new ort.Tensor('float32', entree, [1, 3, ch, cl]);
-  const resultats = await session.run({ [session.inputNames[0]]: tenseur });
-  const carte = resultats[session.outputNames[0]].data;   // la sortie principale
-  const duree = performance.now() - debut;
-  envoyer({ type: 'progression', etape: 'bords', fraction: 0, duree });
-
-  // 2. La carte est ramenée entre 0 et 1. U²-Netp : on étire ses valeurs
-  //    (comme le fait rembg) ; MODNet donne déjà une opacité entre 0 et 1.
+  let tenseur = null;
+  let resultats = null;
+  let duree = 0;
   const normale = new Float32Array(cl * ch);
-  if (modele === 'personne') {
-    for (let i = 0; i < normale.length; i++) normale[i] = Math.min(1, Math.max(0, carte[i]));
-  } else {
-    let min = Infinity, max = -Infinity;
-    for (const v of carte) { if (v < min) min = v; if (v > max) max = v; }
-    const ecart = max - min || 1;
-    for (let i = 0; i < normale.length; i++) normale[i] = (carte[i] - min) / ecart;
+  try {
+    tenseur = new ort.Tensor('float32', entree, [1, 3, ch, cl]);
+    resultats = await session.run({ [session.inputNames[0]]: tenseur });
+    const sortie = resultats[session.outputNames[0]];
+    if (!sortie || !sortie.data) throw new Error('sortie-absente');
+    const carte = sortie.data;   // la sortie principale
+    duree = performance.now() - debut;
+
+    // 2. La carte est ramenée entre 0 et 1. U²-Netp : on étire ses valeurs
+    //    (comme le fait rembg) ; MODNet donne déjà une opacité entre 0 et 1.
+    if (modele === 'personne') {
+      for (let i = 0; i < normale.length; i++) normale[i] = Math.min(1, Math.max(0, carte[i]));
+    } else {
+      let min = Infinity, max = -Infinity;
+      for (const v of carte) { if (v < min) min = v; if (v > max) max = v; }
+      const ecart = max - min || 1;
+      for (let i = 0; i < normale.length; i++) normale[i] = (carte[i] - min) / ecart;
+    }
+  } finally {
+    if (tenseur && typeof tenseur.dispose === 'function') {
+      try { tenseur.dispose(); } catch (e) { /* rien */ }
+    }
+    if (resultats && typeof resultats === 'object') {
+      for (const t of Object.values(resultats)) {
+        if (t && typeof t.dispose === 'function') {
+          try { t.dispose(); } catch (e) { /* rien */ }
+        }
+      }
+    }
   }
+  envoyer({ type: 'progression', etape: 'bords', fraction: 0, duree });
 
   // 3. Les bords sont recalés sur la photo, à la taille du guide
   const { largeur: l, hauteur: h, pixels } = guide;

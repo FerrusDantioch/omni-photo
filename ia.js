@@ -28,6 +28,8 @@
 
 const TAILLE_GUIDE = 1024;     // taille du recalage des bords
 const DELAI_MAX_IA = 240000;   // au-delà de 4 minutes, on abandonne
+const DELAI_INACTIVITE_IA = 150000;   // arrêt du travailleur après 2,5 minutes d'inactivité
+const WASM_SIMD_PROBE = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 96, 0, 0, 3, 2, 1, 0, 10, 30, 1, 28, 0, 65, 0, 253, 15, 253, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 253, 186, 1, 26, 11]);
 
 const MODELES_IA = {
   objet: { nom: 'Tout sujet', fichier: 'u2netp.onnx', octets: 4574861 },
@@ -191,6 +193,8 @@ const ModulesIA = {
 const Detourage = {
   _travailleur: null,
   _enCours: null,       // { reussir, rater, minuteur }
+  _minuteurInactivite: null,
+  _workerModuleOk: null,
 
   /* Durée du dernier calcul (en millisecondes), par modèle, pour faire
      avancer la barre au bon rythme. */
@@ -210,25 +214,76 @@ const Detourage = {
   },
 
   possible() {
-    return typeof WebAssembly === 'object' && typeof Worker === 'function';
+    if (typeof WebAssembly !== 'object' || typeof WebAssembly.validate !== 'function' || typeof Worker !== 'function') return false;
+    if (!WebAssembly.validate(WASM_SIMD_PROBE)) return false;
+    if (this._workerModuleOk === null) {
+      let ok = false, url = null, w = null;
+      try {
+        url = URL.createObjectURL(new Blob(['// ok'], { type: 'text/javascript' }));
+        w = new Worker(url, { get type() { ok = true; return 'module'; } });
+      } catch (e) {
+        ok = false;
+      } finally {
+        if (w && typeof w.terminate === 'function') w.terminate();
+        if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      this._workerModuleOk = ok;
+    }
+    return this._workerModuleOk;
+  },
+
+  _classerErreur(texte, defaut = 'echec') {
+    if (!texte) return defaut;
+    if (/memory|alloc|OOM|out of memory|Aborted|RangeError/i.test(texte)) return 'memoire';
+    if (/modele-absent|fetch|Failed to load|network|NetworkError|404|status\s*:\s*404|HTTP\s*[45]\d\d/i.test(texte)) return 'fichiers';
+    if (/no available backend|not supported|unsupported|simd|webassembly|backend not found/i.test(texte)) return 'impossible';
+    return defaut;
+  },
+
+  _annulerInactivite() {
+    clearTimeout(this._minuteurInactivite);
+    this._minuteurInactivite = null;
+  },
+
+  _programmerInactivite() {
+    this._annulerInactivite();
+    if (!this._travailleur) return;
+    this._minuteurInactivite = setTimeout(() => {
+      this._minuteurInactivite = null;
+      if (!this._enCours) this.fermerTravailleur();
+    }, DELAI_INACTIVITE_IA);
   },
 
   _travail() {
     if (!this._travailleur) {
       const t = new Worker('./detourage-travail.js', { type: 'module' });
       // Le travailleur a planté (le plus souvent : plus de mémoire)
-      t.onerror = (e) => { e.preventDefault(); this._echec(new ErreurIA('memoire', MESSAGES_IA.memoire)); };
+      t.onerror = (e) => {
+        e.preventDefault();
+        const texte = (e && e.message) || '';
+        const code = texte ? this._classerErreur(texte, 'memoire') : 'memoire';
+        this._echec(new ErreurIA(code, MESSAGES_IA[code]));
+      };
       t.onmessageerror = () => this._echec(new ErreurIA('echec', MESSAGES_IA.echec));
       t.onmessage = (e) => this._recevoir(e.data);
       this._travailleur = t;
+      this._programmerInactivite();
     }
     return this._travailleur;
   },
 
   /* On arrête le travailleur (il sera recréé la prochaine fois). */
   _jeter() {
+    this._annulerInactivite();
     if (this._travailleur) this._travailleur.terminate();
     this._travailleur = null;
+  },
+
+  fermerTravailleur() {
+    this._arretDemande = true;
+    ModulesIA.arreter();
+    if (this._enCours) this._echec(new ErreurIA('arret', MESSAGES_IA.arret));
+    else this._jeter();
   },
 
   _echec(erreur) {
@@ -246,9 +301,7 @@ const Detourage = {
     else if (m.type === 'erreur') {
       const texte = m.message || '';
       console.warn('Détourage :', texte);   // le détail technique, pour comprendre un souci
-      let code = 'echec';
-      if (/memory|alloc|OOM|Aborted|RangeError/i.test(texte)) code = 'memoire';
-      else if (/modele-absent|fetch|Failed to load|404|no available backend/i.test(texte)) code = 'fichiers';
+      const code = this._classerErreur(texte, 'echec');
       this._echec(new ErreurIA(code, MESSAGES_IA[code]));
     }
   },
@@ -282,10 +335,14 @@ const Detourage = {
       l = h = 320;        // U²-Netp : 320 × 320
     }
     const { toile, ctx } = nouvelleToile(l, h);
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(r.image, 0, 0, l, h);
-    const px = ctx.getImageData(0, 0, l, h).data;
-    toile.width = 0;
+    let px;
+    try {
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(r.image, 0, 0, l, h);
+      px = ctx.getImageData(0, 0, l, h).data;
+    } finally {
+      toile.width = toile.height = 0;
+    }
     const n = l * h;
     const entree = new Float32Array(3 * n);
     if (modele === 'personne') {
@@ -306,60 +363,74 @@ const Detourage = {
     if (!this.possible()) throw new ErreurIA('impossible', MESSAGES_IA.impossible);
     if (this._enCours) throw new ErreurIA('echec', MESSAGES_IA.echec);
     this._arretDemande = false;
+    this._annulerInactivite();
+    try {
+      avancer(0.02, 'Préparation de la photo…');
+      const { entree, largeur: el, hauteur: eh } = this._entree(r, modele);
 
-    avancer(0.02, 'Préparation de la photo…');
-    const { entree, largeur: el, hauteur: eh } = this._entree(r, modele);
-
-    // Le guide (la photo à 1 024 pixels au plus) pour recaler les bords
-    const f = Math.min(1, TAILLE_GUIDE / Math.max(r.largeur, r.hauteur));
-    const gl = Math.max(1, Math.round(r.largeur * f)), gh = Math.max(1, Math.round(r.hauteur * f));
-    const guide = reduireParEtapes(r.image, r.largeur, r.hauteur, gl, gh);
-    const pixels = guide.getContext('2d').getImageData(0, 0, gl, gh).data;
-    guide.width = 0;
-
-    await laisserAfficher();     // laisse le temps de toucher « Arrêter »
-    this._verifierArret();
-    const estimee = this.dureeEstimee(modele);
-    let animation = null;
-    const resultat = await new Promise((reussir, rater) => {
-      const minuteur = setTimeout(() => this._echec(new ErreurIA('delai', MESSAGES_IA.delai)), DELAI_MAX_IA);
-      this._enCours = {
-        reussir, rater, minuteur,
-        progression: (m) => {
-          if (m.etape === 'modele') avancer(0.05 + 0.25 * m.fraction, 'Chargement de l\'intelligence artificielle…');
-          else if (m.etape === 'moteur') avancer(0.32, 'Démarrage de l\'intelligence artificielle…');
-          else if (m.etape === 'analyse') {
-            // Pendant le calcul, la barre avance doucement selon la durée
-            // de la dernière fois (sans jamais atteindre la fin trop tôt).
-            const t0 = performance.now();
-            clearInterval(animation);
-            animation = setInterval(() => {
-              const k = 1 - Math.exp(-(performance.now() - t0) / estimee * 1.6);
-              avancer(0.35 + 0.5 * k, 'Recherche du sujet…');
-            }, 150);
-          } else if (m.etape === 'bords') {
-            clearInterval(animation);
-            if (m.duree) this._noterDuree(modele, m.duree);
-            avancer(0.87, 'Finition des bords…');
-          }
-        }
-      };
+      // Le guide (la photo à 1 024 pixels au plus) pour recaler les bords
+      const f = Math.min(1, TAILLE_GUIDE / Math.max(r.largeur, r.hauteur));
+      const gl = Math.max(1, Math.round(r.largeur * f)), gh = Math.max(1, Math.round(r.hauteur * f));
+      const guide = reduireParEtapes(r.image, r.largeur, r.hauteur, gl, gh);
+      let pixels;
       try {
-        this._travail().postMessage({ type: 'detourer', modele, entree, largeurEntree: el, hauteurEntree: eh, guide: { largeur: gl, hauteur: gh, pixels } },
-          [entree.buffer, pixels.buffer]);
-      } catch (e) {
-        this._echec(new ErreurIA('memoire', MESSAGES_IA.memoire));
+        pixels = guide.getContext('2d').getImageData(0, 0, gl, gh).data;
+      } finally {
+        guide.width = guide.height = 0;
       }
-    }).finally(() => clearInterval(animation));
 
-    avancer(0.95, 'Finition des bords…');
-    await laisserAfficher();
-    this._verifierArret();
-    const { toile: masque, ctx: cm } = nouvelleToile(resultat.largeur, resultat.hauteur);
-    const im = cm.createImageData(resultat.largeur, resultat.hauteur);
-    for (let i = 0; i < resultat.masque.length; i++) im.data[i * 4 + 3] = resultat.masque[i];
-    cm.putImageData(im, 0, 0);
-    return masque;
+      await laisserAfficher();     // laisse le temps de toucher « Arrêter »
+      this._verifierArret();
+      const estimee = this.dureeEstimee(modele);
+      let animation = null;
+      let resultat;
+      try {
+        resultat = await new Promise((reussir, rater) => {
+          const minuteur = setTimeout(() => this._echec(new ErreurIA('delai', MESSAGES_IA.delai)), DELAI_MAX_IA);
+          this._enCours = {
+            reussir, rater, minuteur,
+            progression: (m) => {
+              if (m.etape === 'modele') avancer(0.05 + 0.25 * m.fraction, 'Chargement de l\'intelligence artificielle…');
+              else if (m.etape === 'moteur') avancer(0.32, 'Démarrage de l\'intelligence artificielle…');
+              else if (m.etape === 'analyse') {
+                // Pendant le calcul, la barre avance doucement selon la durée
+                // de la dernière fois (sans jamais atteindre la fin trop tôt).
+                const t0 = performance.now();
+                clearInterval(animation);
+                animation = setInterval(() => {
+                  const k = 1 - Math.exp(-(performance.now() - t0) / estimee * 1.6);
+                  avancer(0.35 + 0.5 * k, 'Recherche du sujet…');
+                }, 150);
+              } else if (m.etape === 'bords') {
+                clearInterval(animation);
+                if (m.duree) this._noterDuree(modele, m.duree);
+                avancer(0.87, 'Finition des bords…');
+              }
+            }
+          };
+          try {
+            this._travail().postMessage({ type: 'detourer', modele, entree, largeurEntree: el, hauteurEntree: eh, guide: { largeur: gl, hauteur: gh, pixels } },
+              [entree.buffer, pixels.buffer]);
+          } catch (e) {
+            const code = this._classerErreur((e && e.message) || '', 'memoire');
+            this._echec(new ErreurIA(code, MESSAGES_IA[code]));
+          }
+        }).finally(() => clearInterval(animation));
+      } finally {
+        if (this._travailleur && !this._enCours) this._programmerInactivite();
+      }
+
+      avancer(0.95, 'Finition des bords…');
+      await laisserAfficher();
+      this._verifierArret();
+      const { toile: masque, ctx: cm } = nouvelleToile(resultat.largeur, resultat.hauteur);
+      const im = cm.createImageData(resultat.largeur, resultat.hauteur);
+      for (let i = 0; i < resultat.masque.length; i++) im.data[i * 4 + 3] = resultat.masque[i];
+      cm.putImageData(im, 0, 0);
+      return masque;
+    } finally {
+      if (this._travailleur && !this._enCours && !this._minuteurInactivite) this._programmerInactivite();
+    }
   },
 
   /* Trouve le sujet de l'image du calque « c » et renvoie une toile de la
@@ -368,16 +439,25 @@ const Detourage = {
     const r = Ressources.obtenir(c.ressource);
     if (!r) throw new ErreurIA('echec', MESSAGES_IA.echec);
     const masque = await this.masque(r, modele, avancer);
-    const { toile, ctx } = nouvelleToile(r.largeur, r.hauteur);
-    ctx.drawImage(r.image, 0, 0);
-    ctx.globalCompositeOperation = 'destination-in';
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(masque, 0, 0, r.largeur, r.hauteur);
-    ctx.globalCompositeOperation = 'source-over';
-    masque.width = 0;
-    avancer(1, 'Terminé');
-    return toile;
+    let toile = null;
+    try {
+      const cree = nouvelleToile(r.largeur, r.hauteur);
+      toile = cree.toile;
+      const ctx = cree.ctx;
+      ctx.drawImage(r.image, 0, 0);
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(masque, 0, 0, r.largeur, r.hauteur);
+      ctx.globalCompositeOperation = 'source-over';
+      avancer(1, 'Terminé');
+      const sortie = toile;
+      toile = null;
+      return sortie;
+    } finally {
+      if (masque) masque.width = masque.height = 0;
+      if (toile) toile.width = toile.height = 0;
+    }
   }
 };
 
@@ -415,9 +495,10 @@ const OutilIA = {
 
   commencer(c) {
     this.calque = c;
+    if (this.apercu) this.apercu.width = this.apercu.height = 0;
     this.apercu = null;
     this.voirOriginal = false;
-    const choix = $(`input[name="ia-modele"][value="${Detourage.modelePrefere()}"]`);
+    const choix = $(`input[name="ia-modele"][value="${CSS.escape(String(Detourage.modelePrefere()))}"]`);
     if (choix) choix.checked = true;
   },
 
@@ -438,9 +519,12 @@ const OutilIA = {
     this.majPanneau();
     const toile = await avecIA(modele, (avancer) => Detourage.calculer(c, modele, avancer));
     this._calcul = false;
-    if (Editeur.outil !== this || this.calque !== c) return;
+    if (Editeur.outil !== this || this.calque !== c) {
+      if (toile) toile.width = toile.height = 0;
+      return;
+    }
     if (!toile) { this.majPanneau(); return; }
-    if (this.apercu) this.apercu.width = 0;
+    if (this.apercu) this.apercu.width = this.apercu.height = 0;
     this.apercu = toile;
     this.voirOriginal = false;
     this._montrer();
@@ -478,6 +562,7 @@ const OutilIA = {
 
   fermer() {
     if (Detourage._enCours) Detourage.arreter();
+    if (this.apercu) this.apercu.width = this.apercu.height = 0;
     this.apercu = null;
     Rendu.remplacements.clear();
     if (Editeur.outil === this) Editeur.choisirOutil(null);

@@ -48,10 +48,10 @@ const Fond = {
   },
 
   _remplir(c) {
-    ($(`input[name="b-mode"][value="${c.mode}"]`) || {}).checked = true;
+    ($(`input[name="b-mode"][value="${CSS.escape(String(c.mode))}"]`) || {}).checked = true;
     $('#b-couleur').value = c.couleur;
     $('#b-couleur2').value = c.couleur2;
-    ($(`input[name="b-direction"][value="${c.direction}"]`) || {}).checked = true;
+    ($(`input[name="b-direction"][value="${CSS.escape(String(c.direction))}"]`) || {}).checked = true;
     this._majZones();
   },
 

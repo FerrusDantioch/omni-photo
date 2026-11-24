@@ -37,7 +37,7 @@ const TYPES = {
   '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json',
   '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2',
-  '.wasm': 'application/wasm', '.txt': 'text/plain; charset=utf-8', '.pdf': 'application/pdf'
+  '.wasm': 'application/wasm', '.onnx': 'application/octet-stream', '.txt': 'text/plain; charset=utf-8', '.pdf': 'application/pdf'
 };
 
 /* ---------- Le serveur local ---------- */
@@ -78,10 +78,17 @@ const TELEPHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2,
 let navigateur, serveur, adresse;
 const externes = [];         // requêtes vers un autre site
 const erreurs = [];          // erreurs JavaScript
+const violationsCsp = [];    // violations CSP observées
 
 /* « avant » : ce qu'il faut préparer avant d'ouvrir la page (faux site, etc.). */
 async function nouvellePage({ avant, ...options } = {}) {
   const ctx = await navigateur.newContext({ ...TELEPHONE, acceptDownloads: true, ...options });
+  await ctx.addInitScript(() => {
+    window.__cspViolations = [];
+    document.addEventListener('securitypolicyviolation', (e) => {
+      window.__cspViolations.push({ directive: e.violatedDirective, blocked: e.blockedURI || '' });
+    });
+  });
   if (avant) await avant(ctx);
   ctx.on('request', (r) => {
     const u = r.url();
@@ -92,6 +99,52 @@ async function nouvellePage({ avant, ...options } = {}) {
   p.on('console', (m) => { if (m.type() === 'error') erreurs.push(m.text()); });
   await p.goto(adresse);
   return { ctx, p };
+}
+
+async function verifierCsp(p) {
+  let liste = [];
+  try {
+    liste = await p.evaluate(() => window.__cspViolations || []);
+  } catch (e) { /* page fermée ou naviguée */ }
+  for (const v of liste) violationsCsp.push(v);
+  return liste;
+}
+
+function normaliserRef(ref) {
+  if (typeof ref !== 'string') return null;
+  const brut = ref.trim();
+  if (!brut || brut.startsWith('#')) return null;
+  if (/^(?:data:|blob:|mailto:|https?:|\/\/)/i.test(brut)) return null;
+  const sansAncre = brut.split('#')[0].split('?')[0].trim();
+  if (!sansAncre || sansAncre === '.' || sansAncre === './') return 'index.html';
+  return sansAncre.replace(/^\.\//, '');
+}
+
+function tableauSw(texte, nom) {
+  const m = texte.match(new RegExp(`const\\s+${nom}\\s*=\\s*\\[([\\s\\S]*?)\\];`));
+  if (!m) return [];
+  return [...m[1].matchAll(/['"]([^'"]+)['"]/g)].map((x) => x[1]);
+}
+
+function referencesLocalesDuDepot() {
+  const refs = [];
+  const html = fs.readFileSync(path.join(RACINE, 'index.html'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+  for (const m of html.matchAll(/<(link|script|img|source)\b([^>]*)>/gi)) {
+    for (const attr of ['href', 'src']) {
+      const am = m[2].match(new RegExp(`\\b${attr}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'i'));
+      if (am) refs.push(am[1] ?? am[2]);
+    }
+  }
+  const css = fs.readFileSync(path.join(RACINE, 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const m of css.matchAll(/url\(\s*(['"]?)([^)'"]+)\1\s*\)/gi)) refs.push(m[2]);
+  const manifest = JSON.parse(fs.readFileSync(path.join(RACINE, 'manifest.json'), 'utf8'));
+  refs.push(manifest.start_url, manifest.scope);
+  for (const ic of manifest.icons || []) refs.push(ic.src);
+  for (const f of fs.readdirSync(RACINE).filter((x) => x.endsWith('.js') && x !== 'sw.js')) {
+    const code = fs.readFileSync(path.join(RACINE, f), 'utf8');
+    for (const m of code.matchAll(/new\s+Worker\(\s*['"]([^'"]+)['"]/g)) refs.push(m[1]);
+  }
+  return [...new Set(refs.map(normaliserRef).filter(Boolean))];
 }
 
 /* Fichiers cités dans le service worker (« ./qqch.ext » ou « dossier/qqch.ext ») :
@@ -128,6 +181,24 @@ async function controlesCommuns({ serviceWorker, avant }) {
     const manquants = liste.filter((f) => !fs.existsSync(path.join(RACINE, f)));
     verifier(liste.length > 0, `${serviceWorker} cite ${liste.length} fichiers`);
     verifier(manquants.length === 0, 'chacun existe vraiment', manquants);
+
+    const swTexte = fs.readFileSync(path.join(RACINE, serviceWorker), 'utf8');
+    const swSet = new Set(tableauSw(swTexte, 'FICHIERS').map(normaliserRef).filter(Boolean));
+    const manquantsSw = referencesLocalesDuDepot().filter((r) => !swSet.has(r));
+    verifier(manquantsSw.length === 0, `réciprocité HTML/CSS/manifeste/worker → ${serviceWorker}`, manquantsSw);
+    verifier(fs.existsSync(path.join(RACINE, '.nojekyll')), '.nojekyll existe à la racine');
+
+    const html = fs.readFileSync(path.join(RACINE, 'index.html'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+    const csp = html.match(/<meta\s+http-equiv=(?:"Content-Security-Policy"|'Content-Security-Policy')\s+content=(?:"([^"]*)"|'([^']*)')[^>]*>/i);
+    const cspVal = csp ? (csp[1] ?? csp[2]) : '';
+    const cspOk = !!(csp
+      && cspVal.includes("default-src 'self'")
+      && cspVal.includes("script-src 'self' 'wasm-unsafe-eval'")
+      && cspVal.includes("style-src 'self'")
+      && cspVal.includes("object-src 'none'")
+      && cspVal.includes("frame-src 'none'")
+      && !/['"]unsafe-(?:inline|eval|hashes)['"]/i.test(cspVal));
+    verifier(cspOk, 'CSP stricte présente dans index.html');
   });
 
   await section('Ouverture sur un téléphone', async () => {
@@ -157,6 +228,8 @@ async function controlesCommuns({ serviceWorker, avant }) {
       horsLigne = await mesurer(p, () => document.body.innerText.trim().length);
     } catch (e) { /* page introuvable hors ligne */ }
     verifier(horsLigne > 20, 'l’application se rouvre sans internet');
+    const vCsp = await verifierCsp(p);
+    verifier(vCsp.length === 0, 'aucune violation CSP au chargement', vCsp);
     await ctx.close();
   });
 }
@@ -179,6 +252,7 @@ async function lancer(nom, fn, { autorises = [], argsNavigateur = [] } = {}) {
       const autres = externes.filter((u) => !autorises.some((a) => u.startsWith(a)));
       verifier(autres.length === 0, 'aucun autre site contacté', [...new Set(autres)].slice(0, 5));
       verifier(erreurs.length === 0, 'aucune erreur JavaScript', [...new Set(erreurs)].slice(0, 5));
+      verifier(violationsCsp.length === 0, 'zéro violation CSP', violationsCsp.slice(0, 5));
     });
     await navigateur.close();
     serveur.close();
@@ -190,4 +264,4 @@ async function lancer(nom, fn, { autorises = [], argsNavigateur = [] } = {}) {
   process.exit(echecs.length ? 1 : 0);
 }
 
-module.exports = { lancer, section, verifier, nouvellePage, controlesCommuns, RACINE, DOSSIER, erreurs, externes, adresse: () => adresse };
+module.exports = { lancer, section, verifier, nouvellePage, controlesCommuns, verifierCsp, violationsCsp, RACINE, DOSSIER, erreurs, externes, adresse: () => adresse };

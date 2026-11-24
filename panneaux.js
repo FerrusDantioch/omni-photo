@@ -182,7 +182,14 @@ const Panneaux = {
     for (const p of POLICES) {
       const label = document.createElement('label');
       label.className = 'choix-police';
-      label.innerHTML = `<input type="radio" name="t-police" value="${p.id}"><span style='font-family:${p.famille}'>${p.nom}</span>`;
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 't-police';
+      radio.value = p.id;
+      const nomPolice = document.createElement('span');
+      nomPolice.style.fontFamily = p.famille;
+      nomPolice.textContent = p.nom;
+      label.append(radio, nomPolice);
       zonePolices.append(label);
     }
     // Les nuanciers (couleurs d'un toucher)
@@ -195,7 +202,7 @@ const Panneaux = {
         b.dataset.couleur = couleur;
         b.setAttribute('aria-label', 'Couleur ' + couleur);
         b.addEventListener('click', () => {
-          const champ = $('#' + zone.dataset.cible);
+          const champ = $('#' + CSS.escape(String(zone.dataset.cible)));
           champ.value = couleur;
           champ.dispatchEvent(new Event('input', { bubbles: true }));
         });
@@ -205,8 +212,8 @@ const Panneaux = {
 
     const fenetre = $('#fenetre-texte');
     // Chaque changement est visible tout de suite sur la photo
-    fenetre.addEventListener('input', () => this._appliquerTexte());
-    fenetre.addEventListener('change', () => this._appliquerTexte());
+    fenetre.addEventListener('input', (e) => this._appliquerTexte(e));
+    fenetre.addEventListener('change', (e) => this._appliquerTexte(e));
     fenetre.addEventListener('close', () => this._fermerTexte());
   },
 
@@ -218,13 +225,15 @@ const Panneaux = {
     Historique.debut();
 
     $('#t-texte').value = c.texte;
-    const radio = $(`input[name="t-police"][value="${c.police}"]`) || $('input[name="t-police"]');
+    const radio = $(`input[name="t-police"][value="${CSS.escape(String(c.police))}"]`) || $('input[name="t-police"]');
     radio.checked = true;
     const cote = Math.min(Montage.doc.largeur, Montage.doc.hauteur);
-    this._valeur('#t-taille', Math.round((c.taille * c.echelle * 1000) / cote) / 10);
+    const pourcent = Math.round((c.taille * c.echelle * 1000) / cote) / 10;
+    $('#t-taille').max = String(Math.max(40, Math.ceil(pourcent)));
+    this._valeur('#t-taille', pourcent);
     $('#t-couleur').value = c.couleur;
     $('#t-gras').checked = c.gras;
-    ($(`input[name="t-align"][value="${c.alignement}"]`) || {}).checked = true;
+    ($(`input[name="t-align"][value="${CSS.escape(String(c.alignement))}"]`) || {}).checked = true;
     $('#t-contour').checked = c.contour.actif;
     $('#t-contour-couleur').value = c.contour.couleur;
     this._valeur('#t-contour-epaisseur', Math.round(c.contour.epaisseur * 100));
@@ -259,21 +268,18 @@ const Panneaux = {
     $('input[name="t-align"]').closest('fieldset').classList.toggle('inactif', Number($('#t-courbure').value) !== 0);
   },
 
-  _appliquerTexte() {
+  _appliquerTexte(e) {
     const c = Montage.calque(this._texteOuvert);
     if (!c) return;
     for (const el of $$('#fenetre-texte input[type="range"]')) this._majSortie(el);
     this._majZonesTexte();
     const police = ($('input[name="t-police"]:checked') || {}).value || 'simple';
-    const cote = Math.min(Montage.doc.largeur, Montage.doc.hauteur);
-    const tailleVoulue = (Number($('#t-taille').value) / 100) * cote;
-    Montage.modifier(c.id, {
+    const changements = {
       texte: $('#t-texte').value,
       police,
       couleur: $('#t-couleur').value,
       gras: $('#t-gras').checked,
       alignement: ($('input[name="t-align"]:checked') || {}).value || 'centre',
-      echelle: tailleVoulue / c.taille,
       contour: { actif: $('#t-contour').checked, couleur: $('#t-contour-couleur').value, epaisseur: Number($('#t-contour-epaisseur').value) / 100 },
       ombre: {
         actif: $('#t-ombre').checked, couleur: $('#t-ombre-couleur').value,
@@ -282,7 +288,13 @@ const Panneaux = {
       courbure: Number($('#t-courbure').value),
       espacement: Number($('#t-espacement').value) / 100,
       bandeau: { actif: $('#t-bandeau').checked, couleur: $('#t-bandeau-couleur').value, opacite: Number($('#t-bandeau-opacite').value) / 100 }
-    });
+    };
+    if (!e || (e.target && e.target.id === 't-taille')) {
+      const cote = Math.min(Montage.doc.largeur, Montage.doc.hauteur);
+      const tailleVoulue = (Number($('#t-taille').value) / 100) * cote;
+      changements.echelle = tailleVoulue / c.taille;
+    }
+    Montage.modifier(c.id, changements);
   },
 
   _fermerTexte() {

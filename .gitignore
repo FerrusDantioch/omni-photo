@@ -1,2 +1,4 @@
+# Outils des tests automatiques (npm install playwright) : jamais publiés
 node_modules/
+package.json
 package-lock.json

@@ -34,28 +34,42 @@ const Effets = {
     const iw = image.width, ih = image.height;
     const marge = Math.ceil(r) + 2;
     // La silhouette : la forme de l'image, toute de la couleur choisie
-    const { toile: silhouette, ctx: cs } = nouvelleToile(iw, ih);
-    cs.drawImage(image, 0, 0);
-    cs.globalCompositeOperation = 'source-in';
-    cs.fillStyle = couleur;
-    cs.fillRect(0, 0, iw, ih);
-    // Posée tout autour, dans toutes les directions : elle s'épaissit
-    const { toile, ctx } = nouvelleToile(iw + marge * 2, ih + marge * 2);
-    const anneaux = r > 6 ? [1, 0.66, 0.33] : [1, 0.5];
-    for (const k of anneaux) {
-      const rr = r * k;
-      const n = Math.min(48, Math.max(12, Math.ceil((2 * Math.PI * rr) / 3)));
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2;
-        ctx.drawImage(silhouette, marge + rr * Math.cos(a), marge + rr * Math.sin(a));
+    let silhouette = null, toile = null;
+    try {
+      const s = nouvelleToile(iw, ih);
+      silhouette = s.toile;
+      const cs = s.ctx;
+      cs.drawImage(image, 0, 0);
+      cs.globalCompositeOperation = 'source-in';
+      cs.fillStyle = couleur;
+      cs.fillRect(0, 0, iw, ih);
+      // Posée tout autour, dans toutes les directions : elle s'épaissit
+      const cree = nouvelleToile(iw + marge * 2, ih + marge * 2);
+      toile = cree.toile;
+      const ctx = cree.ctx;
+      const anneaux = r > 6 ? [1, 0.66, 0.33] : [1, 0.5];
+      for (const k of anneaux) {
+        const rr = r * k;
+        const n = Math.min(48, Math.max(12, Math.ceil((2 * Math.PI * rr) / 3)));
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          ctx.drawImage(silhouette, marge + rr * Math.cos(a), marge + rr * Math.sin(a));
+        }
       }
+      ctx.drawImage(silhouette, marge, marge);
+    } catch (e) {
+      if (toile) toile.width = toile.height = 0;
+      throw e;
+    } finally {
+      if (silhouette) silhouette.width = silhouette.height = 0;
     }
-    ctx.drawImage(silhouette, marge, marge);
-    silhouette.width = 0;
     const resultat = { toile, marge, enReserve: garder };
     if (garder) {
       if (!parImage) { parImage = new Map(); this._cache.set(image, parImage); }
-      if (parImage.size > 3) parImage.clear();
+      if (parImage.size > 3) {
+        for (const v of parImage.values()) if (v.toile) v.toile.width = v.toile.height = 0;
+        parImage.clear();
+      }
       parImage.set(cle, resultat);
     }
     return resultat;
@@ -82,6 +96,17 @@ const Effets = {
         ctx.shadowBlur = ctx.shadowOffsetX = ctx.shadowOffsetY = 0;
       }
     };
+    const dessiner = () => {
+      if (filtre === 'none') {
+        ctx.drawImage(image, -l / 2, -h / 2, l, h);
+      } else if (supporteFiltreToile(ctx)) {
+        ctx.filter = filtre;
+        ctx.drawImage(image, -l / 2, -h / 2, l, h);
+        ctx.filter = 'none';
+      } else {
+        Lumiere.dessinerAvecFiltre(ctx, image, -l / 2, -h / 2, l, h, c.reglages, !!ecran);
+      }
+    };
     if (e.contour && e.contour.actif && e.contour.epaisseur > 0) {
       // L'image utilisée peut être réduite (affichage) : l'épaisseur suit
       const s = image.width / l;
@@ -92,15 +117,11 @@ const Effets = {
       ctx.drawImage(toile, -l / 2 - m, -h / 2 - m, l + 2 * m, h + 2 * m);
       reglerOmbre(false);
       // Fabriqué juste pour l'export (pas gardé en réserve) : on libère la mémoire
-      if (!this._cache.get(image) || ![...this._cache.get(image).values()].some((x) => x.toile === toile)) toile.width = 0;
-      ctx.filter = filtre;          // la lumière ne touche que l'image, pas le contour
-      ctx.drawImage(image, -l / 2, -h / 2, l, h);
-      ctx.filter = 'none';
+      if (!this._cache.get(image) || ![...this._cache.get(image).values()].some((x) => x.toile === toile)) toile.width = toile.height = 0;
+      dessiner();                   // la lumière ne touche que l'image, pas le contour
     } else {
       reglerOmbre(true);
-      ctx.filter = filtre;
-      ctx.drawImage(image, -l / 2, -h / 2, l, h);
-      ctx.filter = 'none';
+      dessiner();
       reglerOmbre(false);
     }
   }

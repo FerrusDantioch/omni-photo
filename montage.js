@@ -147,12 +147,26 @@ const Montage = {
     copie.verrouille = false;
     // Un peu décalée, pour qu'on voie qu'il y en a deux
     const decalage = Math.min(this.doc.largeur, this.doc.hauteur) * 0.04;
-    copie.x = limiter(c.x + decalage, 0, this.doc.largeur);
-    copie.y = limiter(c.y + decalage, 0, this.doc.hauteur);
+    copie.x = c.x + decalage;
+    copie.y = c.y + decalage;
+    this._bornerPosition(copie);
     this.doc.calques.splice(this.indexDe(id) + 1, 0, copie);
     this.selection = copie.id;
     this.signaler();
     return copie;
+  },
+
+  /* Garde le calque accessible dans l'image tout en permettant les recadrages excentrés. */
+  _bornerPosition(c) {
+    const doc = this.doc;
+    const taille = typeof Rendu !== 'undefined' ? Rendu.tailleCalque(c) : { largeur: c.largeur || 0, hauteur: c.hauteur || 0 };
+    const w = (taille.largeur || 0) * c.echelle, h = (taille.hauteur || 0) * c.echelle;
+    const a = (c.rotation * Math.PI) / 180;
+    const cos = Math.abs(Math.cos(a)), sin = Math.abs(Math.sin(a));
+    const demiL = (w * cos + h * sin) / 2, demiH = (w * sin + h * cos) / 2;
+    const mx = Math.min(20, doc.largeur / 2, demiL), my = Math.min(20, doc.hauteur / 2, demiH);
+    c.x = limiter(c.x, -demiL + mx, doc.largeur + demiL - mx);
+    c.y = limiter(c.y, -demiH + my, doc.hauteur + demiH - my);
   },
 
   /* Change l'ordre : +1 = un cran vers le dessus, -1 = un cran vers le
@@ -173,13 +187,9 @@ const Montage = {
     const c = this.calque(id);
     if (!c) return;
     Object.assign(c, changements);
-    if ('x' in changements || 'y' in changements) {
-      // Le centre du calque reste dans l'image : on ne peut pas le perdre.
-      c.x = limiter(c.x, 0, this.doc.largeur);
-      c.y = limiter(c.y, 0, this.doc.hauteur);
-    }
     if ('echelle' in changements) c.echelle = limiter(c.echelle, 0.01, 40);
     if ('rotation' in changements) c.rotation = normaliserAngle(c.rotation);
+    if ('x' in changements || 'y' in changements) this._bornerPosition(c);
     this.signaler();
   },
 

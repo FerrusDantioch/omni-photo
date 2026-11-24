@@ -116,19 +116,49 @@ const Impression = {
   _pret: null,          // la dernière feuille fabriquée { empreinte, blob, mp, pdf }
   _miniature: null,
   _url: null,
+  _minuteurUrl: null,
+  _feuillePage: null,
+
+  _oublierUrl() {
+    clearTimeout(this._minuteurUrl);
+    this._minuteurUrl = null;
+    if (this._url) {
+      URL.revokeObjectURL(this._url);
+      this._url = null;
+    }
+    const img = $('#impression img');
+    if (img) img.removeAttribute('src');
+  },
+
+  reinitialiser() {
+    this._pret = null;
+    if (this._miniature) { this._miniature.width = this._miniature.height = 0; this._miniature = null; }
+    this._oublierUrl();
+    const apercu = $('#i-apercu');
+    if (apercu) apercu.width = apercu.height = 0;
+  },
 
   initialiser() {
     const f = $('#fenetre-impression');
     f.addEventListener('input', () => this.apercu());
     f.addEventListener('change', () => { this._retenir(); this.apercu(); });
-    f.addEventListener('close', () => { if (this._miniature) this._miniature.width = 0; this._miniature = null; });
+    f.addEventListener('close', () => {
+      if (this._miniature) { this._miniature.width = this._miniature.height = 0; this._miniature = null; }
+      this._pret = null;
+      const apercu = $('#i-apercu');
+      if (apercu) apercu.width = apercu.height = 0;
+    });
+    window.addEventListener('afterprint', () => {
+      clearTimeout(this._minuteurUrl);
+      this._minuteurUrl = setTimeout(() => this._oublierUrl(), 5000);
+    });
     $('[data-action="partager-pdf"]').hidden = !this._peutPartager();
     // Les derniers choix (papier, nombre…)
     try {
       const r = JSON.parse(localStorage.getItem('omniphoto-impression') || 'null');
       if (r) {
-        const p = $(`input[name="i-papier"][value="${r.papier}"]`); if (p) p.checked = true;
-        const n = $(`input[name="i-nombre"][value="${r.nombre}"]`); if (n) n.checked = true;
+        const p = $(`input[name="i-papier"][value="${CSS.escape(String(r.papier))}"]`); if (p) p.checked = true;
+        const n = $(`input[name="i-nombre"][value="${CSS.escape(String(r.nombre))}"]`); if (n) n.checked = true;
         $('#i-remplir').checked = !!r.remplir;
         $('#i-marge').checked = r.marge !== false;
       }
@@ -162,12 +192,18 @@ const Impression = {
     if (!Montage.doc) return;
     if ($('#fenetre-export').open) $('#fenetre-export').close();
     // Une petite image du montage, pour l'aperçu de la feuille
+    if (this._miniature) { this._miniature.width = this._miniature.height = 0; this._miniature = null; }
     const d = Montage.doc;
     const f = 360 / Math.max(d.largeur, d.hauteur);
     const { toile, ctx } = nouvelleToile(Math.max(1, Math.round(d.largeur * f)), Math.max(1, Math.round(d.hauteur * f)));
-    ctx.setTransform(f, 0, 0, f, 0, 0);
-    Rendu.dessinerMontage(ctx, d, { ecran: true, zoom: f, miniature: true });
-    this._miniature = toile;
+    try {
+      ctx.setTransform(f, 0, 0, f, 0, 0);
+      Rendu.dessinerMontage(ctx, d, { ecran: true, zoom: f, miniature: true });
+      this._miniature = toile;
+    } catch (e) {
+      toile.width = toile.height = 0;
+      throw e;
+    }
     $('#fenetre-impression').showModal();
     this.apercu();
   },
@@ -281,13 +317,20 @@ const Impression = {
   async imprimer() {
     const p = await this._preparer(false);
     if (!p) return;
-    if (this._url) URL.revokeObjectURL(this._url);
+    this._oublierUrl();
     this._url = URL.createObjectURL(p.blob);
     const image = $('#impression img');
     image.src = this._url;
     image.style.width = p.mp.L + 'mm';
     image.style.height = p.mp.H + 'mm';
-    $('#style-impression').textContent = `@page { size: ${p.mp.L}mm ${p.mp.H}mm; margin: 0; }`;
+    const reglePage = `@page { size: ${p.mp.L}mm ${p.mp.H}mm; margin: 0; }`;
+    if (typeof CSSStyleSheet !== 'undefined' && typeof CSSStyleSheet.prototype.replaceSync === 'function' && 'adoptedStyleSheets' in document) {
+      if (!this._feuillePage) {
+        this._feuillePage = new CSSStyleSheet();
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, this._feuillePage];
+      }
+      this._feuillePage.replaceSync(reglePage);
+    }
     try { await image.decode(); } catch (e) { /* l'impression attendra l'image */ }
     $('#fenetre-impression').close();
     Message.cacher();
@@ -330,6 +373,7 @@ const Impression = {
       if (e && e.name === 'NotAllowedError') {
         Message.montrer('Ta feuille est prête : touche encore une fois « Partager le PDF ».');
       } else if (e && e.name !== 'AbortError') {
+        this._pret = null;
         Message.erreur('Le partage n\'a pas marché. Utilise plutôt « Enregistrer en PDF ».');
       }
     }

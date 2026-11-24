@@ -36,8 +36,13 @@ const OutilCorrecteur = {
   pointSource: null,      // l'endroit à recopier (mode « copier »)
   voirOriginal: false,
   _curseur: null,
+  _reglage: false,
+  _minuteurReglage: null,
 
   commencer(c) {
+    clearTimeout(this._minuteurReglage);
+    this._minuteurReglage = null;
+    this._reglage = false;
     this.calque = c;
     this.travail = null;
     this.travailSource = null;
@@ -125,16 +130,32 @@ const OutilCorrecteur = {
     this._trait = null;
     this._curseur = null;
     if (t) {
+      let ok = true;
       if (t.mode === 'effacer') {
+        let sauve = null, boite = null;
         try {
+          if (this.operations.length && this.travailSource) {
+            boite = this._boiteTrait(t, this.travail.width, this.travail.height);
+            if (boite.l > 2 && boite.h > 2) {
+              sauve = this.travail.getContext('2d', { willReadFrequently: true }).getImageData(boite.x0, boite.y0, boite.l, boite.h);
+            }
+          }
           this._appliquerEffacer(this.travail, t);
           if (this.travailSource) this._appliquerEffacer(this.travailSource, t);
         } catch (e) {
+          ok = false;
           console.warn(e);
+          if (!this.operations.length) {
+            if (this.travail) this.travail.width = this.travail.height = 0;
+            if (this.travailSource) this.travailSource.width = this.travailSource.height = 0;
+            this.travail = this.travailSource = null;
+          } else if (sauve && this.travail) {
+            this.travail.getContext('2d', { willReadFrequently: true }).putImageData(sauve, boite.x0, boite.y0);
+          }
           Message.erreur(MESSAGES_PHOTO.memoire);
         }
       }
-      this.operations.push(t);
+      if (ok) this.operations.push(t);
     }
     this._liberInstantanes();
     this.voirOriginal = false;
@@ -194,15 +215,18 @@ const OutilCorrecteur = {
 
   /* ---------- Effacer un défaut ---------- */
 
-  _appliquerEffacer(toile, t) {
-    const W = toile.width, H = toile.height;
-    // La boîte autour du trait (plus une marge : les pixels connus du bord)
+  _boiteTrait(t, W, H) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const p of t.points) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
     const marge = t.rayon + 4;
     x0 = Math.max(0, Math.floor(x0 - marge)); y0 = Math.max(0, Math.floor(y0 - marge));
     x1 = Math.min(W, Math.ceil(x1 + marge)); y1 = Math.min(H, Math.ceil(y1 + marge));
-    const l = x1 - x0, h = y1 - y0;
+    return { x0, y0, l: x1 - x0, h: y1 - y0 };
+  },
+
+  _appliquerEffacer(toile, t) {
+    // La boîte autour du trait (plus une marge : les pixels connus du bord)
+    const { x0, y0, l, h } = this._boiteTrait(t, toile.width, toile.height);
     if (l <= 2 || h <= 2) return;
     // Le masque : les pixels à remplir (le trait, épaissi au rayon du pinceau)
     const { toile: tm, ctx: cm } = nouvelleToile(l, h);
@@ -239,30 +263,51 @@ const OutilCorrecteur = {
     }
     const grain = n ? Math.min(14, Math.sqrt(Math.max(0, s2 / n - (s / n) ** 2)) * 0.5) : 0;
 
-    // 1. « Épluchage » : du bord vers le centre
+    // 1. « Épluchage » : du bord vers le centre (BFS O(l × h), par couches successives)
     const connu = new Uint8Array(l * h);
     for (let i = 0; i < l * h; i++) connu[i] = inconnu[i] ? 0 : 1;
-    let restants = nInconnus;
     const voisins = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]];
-    for (let tour = 0; restants > 0 && tour < l + h; tour++) {
-      const nouveaux = [];
-      for (let y = 0; y < h; y++) for (let x = 0; x < l; x++) {
-        const k = y * l + x;
-        if (connu[k]) continue;
-        let somme = [0, 0, 0, 0], poids = 0;
+    const file = new Int32Array(nInconnus);
+    let debut = 0, fin = 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < l; x++) {
+      const k = y * l + x;
+      if (connu[k] !== 0) continue;
+      for (const [vx, vy] of voisins) {
+        const xx = x + vx, yy = y + vy;
+        if (xx >= 0 && yy >= 0 && xx < l && yy < h && connu[yy * l + xx] === 1) {
+          connu[k] = 2;
+          file[fin++] = k;
+          break;
+        }
+      }
+    }
+    for (let tour = 0; debut < fin && tour < l + h; tour++) {
+      const finTour = fin;
+      for (let i = debut; i < finTour; i++) {
+        const k = file[i];
+        const x = k % l, y = (k - x) / l;
+        let s0 = 0, s1 = 0, s2 = 0, s3 = 0, poids = 0;
         for (const [vx, vy] of voisins) {
           const xx = x + vx, yy = y + vy;
           if (xx < 0 || yy < 0 || xx >= l || yy >= h) continue;
           const kk = yy * l + xx;
-          if (!connu[kk]) continue;
-          const w = vx && vy ? 0.7 : 1;
-          for (let c = 0; c < 4; c++) somme[c] += px[kk * 4 + c] * w;
-          poids += w;
+          if (connu[kk] === 1) {
+            const w = vx && vy ? 0.7 : 1;
+            const p4 = kk * 4;
+            s0 += px[p4] * w; s1 += px[p4 + 1] * w; s2 += px[p4 + 2] * w; s3 += px[p4 + 3] * w;
+            poids += w;
+          } else if (connu[kk] === 0) {
+            connu[kk] = 2;
+            file[fin++] = kk;
+          }
         }
-        if (poids) nouveaux.push([k, somme.map((v) => v / poids)]);
+        if (poids) {
+          const p4 = k * 4;
+          px[p4] = s0 / poids; px[p4 + 1] = s1 / poids; px[p4 + 2] = s2 / poids; px[p4 + 3] = s3 / poids;
+        }
       }
-      if (!nouveaux.length) break;
-      for (const [k, v] of nouveaux) { for (let c = 0; c < 4; c++) px[k * 4 + c] = v[c]; connu[k] = 1; restants--; }
+      for (let i = debut; i < finTour; i++) connu[file[i]] = 1;
+      debut = finTour;
     }
 
     // 2. Lissage (on moyenne avec les 4 voisins, seulement dans la zone)
@@ -299,27 +344,37 @@ const OutilCorrecteur = {
     this.operations.pop();
     // On repart de l'image d'origine et on refait les autres traits
     const ops = this.operations;
-    if (this.travail) this.travail.width = 0;
-    if (this.travailSource) this.travailSource.width = 0;
+    if (this.travail) this.travail.width = this.travail.height = 0;
+    if (this.travailSource) this.travailSource.width = this.travailSource.height = 0;
     this.travail = this.travailSource = null;
     if (ops.length) {
-      this._preparer();
-      for (const t of ops) {
-        if (t.mode === 'effacer') {
-          this._appliquerEffacer(this.travail, t);
-          if (this.travailSource) this._appliquerEffacer(this.travailSource, t);
-        } else {
-          this._instantane = this._copie(this.travail);
-          this._instantaneSource = this.travailSource ? this._copie(this.travailSource) : null;
-          this._tamponCopie(t, t.points[0]);
-          for (let i = 1; i < t.points.length; i++) {
-            const a = t.points[i - 1], b = t.points[i];
-            const d = Math.hypot(b.x - a.x, b.y - a.y);
-            const n = Math.max(1, Math.ceil(d / Math.max(0.5, t.rayon * 0.25)));
-            for (let k = 1; k <= n; k++) this._tamponCopie(t, { x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+      try {
+        this._preparer();
+        for (const t of ops) {
+          if (t.mode === 'effacer') {
+            this._appliquerEffacer(this.travail, t);
+            if (this.travailSource) this._appliquerEffacer(this.travailSource, t);
+          } else {
+            this._instantane = this._copie(this.travail);
+            this._instantaneSource = this.travailSource ? this._copie(this.travailSource) : null;
+            this._tamponCopie(t, t.points[0]);
+            for (let i = 1; i < t.points.length; i++) {
+              const a = t.points[i - 1], b = t.points[i];
+              const d = Math.hypot(b.x - a.x, b.y - a.y);
+              const n = Math.max(1, Math.ceil(d / Math.max(0.5, t.rayon * 0.25)));
+              for (let k = 1; k <= n; k++) this._tamponCopie(t, { x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+            }
+            this._liberInstantanes();
           }
-          this._liberInstantanes();
         }
+      } catch (e) {
+        console.warn(e);
+        this._liberInstantanes();
+        if (this.travail) this.travail.width = this.travail.height = 0;
+        if (this.travailSource) this.travailSource.width = this.travailSource.height = 0;
+        this.travail = this.travailSource = null;
+        this.operations = [];
+        Message.erreur(MESSAGES_PHOTO.memoire);
       }
     }
     this._maj();
@@ -340,7 +395,7 @@ const OutilCorrecteur = {
   },
 
   valider() {
-    if (!this.operations.length) { this.fermer(); return; }
+    if (!this.operations.length || !this.travail) { this.fermer(); return; }
     let source = null;
     if (this.travailSource) source = Ressources.depuisToile(this.travailSource);
     const toile = this.travail;
@@ -351,8 +406,11 @@ const OutilCorrecteur = {
   },
 
   fermer() {
-    if (this.travail) this.travail.width = 0;
-    if (this.travailSource) this.travailSource.width = 0;
+    clearTimeout(this._minuteurReglage);
+    this._minuteurReglage = null;
+    this._reglage = false;
+    if (this.travail) this.travail.width = this.travail.height = 0;
+    if (this.travailSource) this.travailSource.width = this.travailSource.height = 0;
     this._liberInstantanes();
     this.travail = this.travailSource = null;
     this.operations = [];

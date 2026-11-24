@@ -31,9 +31,17 @@ const OutilCacher = {
   _cadre: null,           // le rectangle ou l'ovale en train d'être tracé { a, b } (écran)
   _trait: null,           // le trait au doigt en train d'être tracé
   _curseur: null,
+  _minuteurCalcul: null,
+  _minuteurReglage: null,
+  _reglage: false,
   voirOriginal: false,
 
   commencer(c) {
+    clearTimeout(this._minuteurCalcul);
+    this._minuteurCalcul = null;
+    clearTimeout(this._minuteurReglage);
+    this._minuteurReglage = null;
+    this._reglage = false;
     this.calque = c;
     this._liberer();
     this.zones = [];
@@ -200,9 +208,13 @@ const OutilCacher = {
     const x1 = Math.min(W, Math.ceil(b.x1 / cote) * cote), y1 = Math.min(H, Math.ceil(b.y1 / cote) * cote);
     const l = x1 - x0, h = y1 - y0;
     const { toile: tm, ctx: cm } = nouvelleToile(l, h);
-    this._dessinerZone(cm, zone, x0, y0);
-    const masque = cm.getImageData(0, 0, l, h).data;
-    tm.width = 0;
+    let masque;
+    try {
+      this._dessinerZone(cm, zone, x0, y0);
+      masque = cm.getImageData(0, 0, l, h).data;
+    } finally {
+      tm.width = tm.height = 0;
+    }
     const ctx = toile.getContext('2d', { willReadFrequently: true });
     const image = ctx.getImageData(x0, y0, l, h);
     const d = image.data;
@@ -246,33 +258,54 @@ const OutilCacher = {
     // 1. La région, réduite (un flou de quelques pixels suffit alors)
     const k = Math.max(1, Math.floor(force / 4));
     const pl = Math.max(1, Math.ceil(l / k)), ph = Math.max(1, Math.ceil(h / k));
-    const { toile: petite, ctx: cp } = nouvelleToile(pl, ph);
-    cp.imageSmoothingQuality = 'high';
-    cp.drawImage(toile, b.x0, b.y0, l, h, 0, 0, pl, ph);
-    const image = cp.getImageData(0, 0, pl, ph);
-    flouBoite(image.data, pl, ph, Math.max(1, Math.round(force / k)));
-    cp.putImageData(image, 0, 0);
-    // 2. Agrandie à la taille de la région
-    const { toile: floue, ctx: cf } = nouvelleToile(l, h);
-    cf.imageSmoothingQuality = 'high';
-    cf.drawImage(petite, 0, 0, pl, ph, 0, 0, l, h);
-    petite.width = 0;
-    // 3. Le masque : la zone, un peu élargie puis adoucie (le bord tracé
-    //    reste donc entièrement caché ; le fondu se fait à l'extérieur)
-    const { toile: tm, ctx: cm } = nouvelleToile(l, h);
-    if ('filter' in cm) cm.filter = `blur(${adoucir}px)`;
-    this._dessinerZone(cm, zone, b.x0, b.y0, adoucir * 2);
-    cf.globalCompositeOperation = 'destination-in';
-    cf.drawImage(tm, 0, 0);
-    tm.width = 0;
-    toile.getContext('2d').drawImage(floue, b.x0, b.y0);
-    floue.width = 0;
+    let petite = null, floue = null, tm = null;
+    try {
+      const p = nouvelleToile(pl, ph);
+      petite = p.toile;
+      const cp = p.ctx;
+      cp.imageSmoothingQuality = 'high';
+      cp.drawImage(toile, b.x0, b.y0, l, h, 0, 0, pl, ph);
+      const image = cp.getImageData(0, 0, pl, ph);
+      flouBoite(image.data, pl, ph, Math.max(1, Math.round(force / k)));
+      cp.putImageData(image, 0, 0);
+      // 2. Agrandie à la taille de la région
+      const f = nouvelleToile(l, h);
+      floue = f.toile;
+      const cf = f.ctx;
+      cf.imageSmoothingQuality = 'high';
+      cf.drawImage(petite, 0, 0, pl, ph, 0, 0, l, h);
+      petite.width = petite.height = 0;
+      petite = null;
+      // 3. Le masque : la zone, un peu élargie puis adoucie (le bord tracé
+      //    reste donc entièrement caché ; le fondu se fait à l'extérieur)
+      const m = nouvelleToile(l, h);
+      tm = m.toile;
+      const cm = m.ctx;
+      if (supporteFiltreToile(cm)) {
+        cm.filter = `blur(${adoucir}px)`;
+        this._dessinerZone(cm, zone, b.x0, b.y0, adoucir * 2);
+        cm.filter = 'none';
+      } else {
+        this._dessinerZone(cm, zone, b.x0, b.y0, adoucir * 2);
+        flouterToileEnPlace(tm, cm, adoucir);
+      }
+      cf.globalCompositeOperation = 'destination-in';
+      cf.drawImage(tm, 0, 0);
+      tm.width = tm.height = 0;
+      tm = null;
+      toile.getContext('2d').drawImage(floue, b.x0, b.y0);
+    } finally {
+      if (petite) petite.width = petite.height = 0;
+      if (tm) tm.width = tm.height = 0;
+      if (floue) floue.width = floue.height = 0;
+    }
   },
 
   /* Refait l'aperçu depuis l'image d'origine : toutes les zones, avec
      l'effet et la force choisis maintenant. */
   _calculer() {
     clearTimeout(this._minuteurCalcul);
+    this._minuteurCalcul = null;
     this._liberer();
     if (this.zones.length) {
       const c = this.calque;
@@ -311,12 +344,12 @@ const OutilCacher = {
     this.majPanneau();
     if (!this.zones.length) return;
     clearTimeout(this._minuteurCalcul);
-    this._minuteurCalcul = setTimeout(() => this._calculer(), e && e.type === 'input' ? 150 : 0);
+    this._minuteurCalcul = setTimeout(() => { this._minuteurCalcul = null; this._calculer(); }, e && e.type === 'input' ? 150 : 0);
   },
 
   _liberer() {
-    if (this.travail) this.travail.width = 0;
-    if (this.travailSource) this.travailSource.width = 0;
+    if (this.travail) this.travail.width = this.travail.height = 0;
+    if (this.travailSource) this.travailSource.width = this.travailSource.height = 0;
     this.travail = this.travailSource = null;
   },
 
@@ -336,9 +369,11 @@ const OutilCacher = {
   },
 
   valider() {
+    const enAttente = !!this._minuteurCalcul;
     clearTimeout(this._minuteurCalcul);
+    this._minuteurCalcul = null;
     if (!this.zones.length) { this.fermer(); return; }
-    if (!this.travail) this._calculer();
+    if (!this.travail || enAttente) this._calculer();
     if (!this.travail) return;
     const source = this.travailSource ? Ressources.depuisToile(this.travailSource) : null;
     const toile = this.travail;
@@ -350,6 +385,10 @@ const OutilCacher = {
 
   fermer() {
     clearTimeout(this._minuteurCalcul);
+    this._minuteurCalcul = null;
+    clearTimeout(this._minuteurReglage);
+    this._minuteurReglage = null;
+    this._reglage = false;
     this._liberer();
     this.zones = [];
     this._cadre = this._trait = null;
@@ -428,39 +467,3 @@ const OutilCacher = {
     Editeur.redessiner();
   }
 };
-
-/* Un flou rapide : 3 passes de « moyenne glissante » (horizontale puis
-   verticale), sur des couleurs pondérées par l'opacité. Au bord, on
-   répète le dernier pixel (le flou ne « mange » pas le bord de la photo). */
-function flouBoite(d, l, h, rayon) {
-  const n = l * h;
-  const px = new Float32Array(n * 4);
-  for (let i = 0; i < n; i++) {
-    const a = d[i * 4 + 3] / 255;
-    px[i * 4] = d[i * 4] * a; px[i * 4 + 1] = d[i * 4 + 1] * a; px[i * 4 + 2] = d[i * 4 + 2] * a; px[i * 4 + 3] = d[i * 4 + 3];
-  }
-  const tampon = new Float32Array(Math.max(l, h) * 4);
-  const passe = (longueur, nombre, indice) => {
-    const largeurBoite = rayon * 2 + 1;
-    for (let ligne = 0; ligne < nombre; ligne++) {
-      for (let c = 0; c < 4; c++) {
-        let somme = 0;
-        for (let k = -rayon; k <= rayon; k++) somme += px[indice(ligne, limiter(k, 0, longueur - 1)) * 4 + c];
-        for (let k = 0; k < longueur; k++) {
-          tampon[k * 4 + c] = somme / largeurBoite;
-          somme += px[indice(ligne, Math.min(longueur - 1, k + rayon + 1)) * 4 + c] - px[indice(ligne, Math.max(0, k - rayon)) * 4 + c];
-        }
-      }
-      for (let k = 0; k < longueur; k++) for (let c = 0; c < 4; c++) px[indice(ligne, k) * 4 + c] = tampon[k * 4 + c];
-    }
-  };
-  for (let fois = 0; fois < 3; fois++) {
-    passe(l, h, (y, x) => y * l + x);   // horizontale
-    passe(h, l, (x, y) => y * l + x);   // verticale
-  }
-  for (let i = 0; i < n; i++) {
-    const a = px[i * 4 + 3];
-    const f = a > 0.5 ? 255 / a : 0;
-    d[i * 4] = Math.round(px[i * 4] * f); d[i * 4 + 1] = Math.round(px[i * 4 + 1] * f); d[i * 4 + 2] = Math.round(px[i * 4 + 2] * f); d[i * 4 + 3] = Math.round(a);
-  }
-}

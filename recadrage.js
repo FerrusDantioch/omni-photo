@@ -43,7 +43,22 @@ const OutilRecadrage = {
   _noterQuartDeTour() {
     const p = this._photo();
     this._quart = p ? Math.round(p.rotation / 90) * 90 : 0;
-    $('#rc-redresser').value = p ? Math.round(normaliserAngle(p.rotation - this._quart)) : 0;
+    const alpha0 = p ? normaliserAngle(p.rotation - this._quart) : 0;
+    $('#rc-redresser').value = Math.round(alpha0);
+    if (p && Montage.doc) {
+      const cx = Montage.doc.largeur / 2, cy = Montage.doc.hauteur / 2;
+      const r0 = (alpha0 * Math.PI) / 180;
+      const dx = p.x - cx, dy = p.y - cy;
+      this._base = {
+        ox: dx * Math.cos(r0) + dy * Math.sin(r0),
+        oy: -dx * Math.sin(r0) + dy * Math.cos(r0),
+        px: p.x,
+        py: p.y,
+        echelle: p.echelle
+      };
+    } else {
+      this._base = null;
+    }
   },
 
   _plein() {
@@ -189,14 +204,35 @@ const OutilRecadrage = {
     const c = this._photo();
     if (!c) return;
     const d = Montage.doc;
-    const a = (Math.abs(angle) * Math.PI) / 180;
-    const cos = Math.cos(a), sin = Math.sin(a);
+    const base = this._base || { ox: c.x - d.largeur / 2, oy: c.y - d.hauteur / 2, px: c.x, py: c.y, echelle: c.echelle };
+    const cx = d.largeur / 2, cy = d.hauteur / 2;
+    const rad = (angle * Math.PI) / 180;
+    const cosR = Math.cos(rad), sinR = Math.sin(rad);
     // Photo couchée (quart de tour) : sa largeur est à la verticale
     const couchee = Math.abs(normaliserAngle(this._quart)) === 90;
     const pl = couchee ? c.hauteur : c.largeur, ph = couchee ? c.largeur : c.hauteur;
-    const echelle = Math.max((d.largeur * cos + d.hauteur * sin) / pl, (d.largeur * sin + d.hauteur * cos) / ph);
+    const halfW = (pl * base.echelle) / 2, halfH = (ph * base.echelle) / 2;
+    let k = 1, x, y;
+    if (Math.abs(base.ox) < halfW && Math.abs(base.oy) < halfH) {
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+        const ux = sx * cx, uy = sy * cy;
+        const a = ux * cosR + uy * sinR;
+        const b = -ux * sinR + uy * cosR;
+        if (a > 0) k = Math.max(k, a / (halfW + base.ox));
+        else if (a < 0) k = Math.max(k, -a / (halfW - base.ox));
+        if (b > 0) k = Math.max(k, b / (halfH + base.oy));
+        else if (b < 0) k = Math.max(k, -b / (halfH - base.oy));
+      }
+      k = Math.min(k, Math.max(1, 40 / base.echelle));
+      x = cx + k * (base.ox * cosR - base.oy * sinR);
+      y = cy + k * (base.ox * sinR + base.oy * cosR);
+    } else {
+      x = base.px ?? (cx + base.ox);
+      y = base.py ?? (cy + base.oy);
+    }
+    const echelle = Math.min(40, base.echelle * k);
     Historique.debut();
-    Montage.modifier(c.id, { rotation: this._quart + angle, echelle, x: d.largeur / 2, y: d.hauteur / 2 });
+    Montage.modifier(c.id, { rotation: this._quart + angle, echelle, x, y });
     this._maj();
   },
 
@@ -212,6 +248,7 @@ const OutilRecadrage = {
     this.cadre = null;
     this._geste = null;
     if (Editeur.outil === this) Editeur.choisirOutil(null);
+    Historique.fin();
   },
 
   _maj() {

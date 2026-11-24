@@ -1,0 +1,35 @@
+name: CI Omni-Photo
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Contrôles statiques (CSP, SW réciproque, hygiène, syntaxe JS)
+        run: node tests/verifier-statique.mjs
+
+      - name: Tests unitaires Node
+        run: node --test tests/unit/*.test.mjs
+
+      - name: Installer Playwright (sans modifier package.json)
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Tests E2E navigateur (Playwright)
+        run: node tests/tester.js
+
+      - name: Vérifier qu'aucun fichier parasite n'est suivi par git
+        run: test -z "$(git status --porcelain)"

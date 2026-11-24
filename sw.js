@@ -13,7 +13,7 @@
    de la liste FICHIERS ci-dessous, en même temps que VERSION dans app.js.
    Sinon, les téléphones qui ont déjà ouvert l'application gardent
    l'ancienne version. */
-const CACHE = 'omni-photo-v6';
+const CACHE = 'omni-photo-v7';
 
 /* Les photos reçues du menu « Partager » d'Android, le temps que la page
    les ouvre (version 1.2). */
@@ -119,15 +119,20 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     const anciens = (await caches.keys()).filter((k) => k.startsWith(PREFIXE) && k !== CACHE && k !== CACHE_IA && k !== CACHE_PARTAGE);
-    // La version 1.0 rangeait l'IA avec le reste : on la garde (pas besoin
-    // de la retélécharger), dans la réserve de l'IA.
-    const ia = await caches.open(CACHE_IA);
-    for (const k of anciens) {
-      const vieux = await caches.open(k);
-      for (const f of FICHIERS_IA) {
-        const rep = await vieux.match(f);
-        if (rep && !(await ia.match(f))) await ia.put(new URL(f, self.registration.scope).href, rep);
+    // La version 1.0 (caches v1 à v3) rangeait l'IA avec le reste : on la garde
+    // dans la réserve de l'IA, sans jamais migrer depuis d'anciennes réserves omni-photo-ia-*.
+    const aMigrer = anciens.filter((k) => !k.startsWith(PREFIXE + 'ia-') && /^omni-photo-v[123]$/.test(k));
+    if (aMigrer.length) {
+      const ia = await caches.open(CACHE_IA);
+      for (const k of aMigrer) {
+        const vieux = await caches.open(k);
+        for (const f of FICHIERS_IA) {
+          const rep = await vieux.match(f);
+          if (rep && !(await ia.match(f))) await ia.put(new URL(f, self.registration.scope).href, rep);
+        }
       }
+    }
+    for (const k of anciens) {
       await caches.delete(k);
     }
     await self.clients.claim();

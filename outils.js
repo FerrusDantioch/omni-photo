@@ -165,3 +165,104 @@ const Patience = {
 function laisserAfficher() {
   return new Promise((ok) => requestAnimationFrame(() => setTimeout(ok, 30)));
 }
+
+/* ---------- Repli pour Safari / WebKit sans ctx.filter ---------- */
+
+function supporteFiltreToile(ctx) {
+  return !!ctx && typeof ctx.filter === 'string';
+}
+
+/* Un flou rapide : 3 passes de « moyenne glissante » (horizontale puis
+   verticale), sur des couleurs pondérées par l'opacité. Au bord, on
+   répète le dernier pixel (le flou ne « mange » pas le bord de la photo). */
+function flouBoite(d, l, h, rayon) {
+  const n = l * h;
+  const px = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    const a = d[i * 4 + 3] / 255;
+    px[i * 4] = d[i * 4] * a; px[i * 4 + 1] = d[i * 4 + 1] * a; px[i * 4 + 2] = d[i * 4 + 2] * a; px[i * 4 + 3] = d[i * 4 + 3];
+  }
+  const tampon = new Float32Array(Math.max(l, h) * 4);
+  const passe = (longueur, nombre, indice) => {
+    const largeurBoite = rayon * 2 + 1;
+    for (let ligne = 0; ligne < nombre; ligne++) {
+      for (let c = 0; c < 4; c++) {
+        let somme = 0;
+        for (let k = -rayon; k <= rayon; k++) somme += px[indice(ligne, limiter(k, 0, longueur - 1)) * 4 + c];
+        for (let k = 0; k < longueur; k++) {
+          tampon[k * 4 + c] = somme / largeurBoite;
+          somme += px[indice(ligne, Math.min(longueur - 1, k + rayon + 1)) * 4 + c] - px[indice(ligne, Math.max(0, k - rayon)) * 4 + c];
+        }
+      }
+      for (let k = 0; k < longueur; k++) for (let c = 0; c < 4; c++) px[indice(ligne, k) * 4 + c] = tampon[k * 4 + c];
+    }
+  };
+  for (let fois = 0; fois < 3; fois++) {
+    passe(l, h, (y, x) => y * l + x);   // horizontale
+    passe(h, l, (x, y) => y * l + x);   // verticale
+  }
+  for (let i = 0; i < n; i++) {
+    const a = px[i * 4 + 3];
+    const f = a > 0.5 ? 255 / a : 0;
+    d[i * 4] = Math.round(px[i * 4] * f); d[i * 4 + 1] = Math.round(px[i * 4 + 1] * f); d[i * 4 + 2] = Math.round(px[i * 4 + 2] * f); d[i * 4 + 3] = Math.round(a);
+  }
+}
+
+function dessinerAvecFlou(ctx, source, x, y, l, h, rayon) {
+  if (l <= 0 || h <= 0) return;
+  if (!(rayon > 0)) {
+    ctx.drawImage(source, x, y, l, h);
+    return;
+  }
+  if (supporteFiltreToile(ctx)) {
+    ctx.filter = `blur(${rayon}px)`;
+    ctx.drawImage(source, x, y, l, h);
+    ctx.filter = 'none';
+    return;
+  }
+  const k = Math.max(1, Math.floor(rayon / 4), Math.ceil(Math.sqrt((l * h) / 2000000)));
+  const pl = Math.max(1, Math.ceil(l / k)), ph = Math.max(1, Math.ceil(h / k));
+  const rBoite = Math.max(1, Math.round(rayon / k));
+  let petite = null;
+  try {
+    const cree = nouvelleToile(pl, ph);
+    petite = cree.toile;
+    const cp = cree.ctx;
+    cp.imageSmoothingQuality = 'high';
+    cp.drawImage(source, 0, 0, pl, ph);
+    const img = cp.getImageData(0, 0, pl, ph);
+    flouBoite(img.data, pl, ph, rBoite);
+    cp.putImageData(img, 0, 0);
+    ctx.drawImage(petite, x, y, l, h);
+  } finally {
+    if (petite) petite.width = petite.height = 0;
+  }
+}
+
+function flouterToileEnPlace(toile, ctx, rayon) {
+  if (!toile || !toile.width || !toile.height || !(rayon > 0)) return;
+  const l = toile.width, h = toile.height;
+  const k = Math.max(1, Math.floor(rayon / 4), Math.ceil(Math.sqrt((l * h) / 2000000)));
+  const pl = Math.max(1, Math.ceil(l / k)), ph = Math.max(1, Math.ceil(h / k));
+  const rBoite = Math.max(1, Math.round(rayon / k));
+  let petite = null;
+  try {
+    const cree = nouvelleToile(pl, ph);
+    petite = cree.toile;
+    const cp = cree.ctx;
+    cp.imageSmoothingQuality = 'high';
+    cp.drawImage(toile, 0, 0, pl, ph);
+    const img = cp.getImageData(0, 0, pl, ph);
+    flouBoite(img.data, pl, ph, rBoite);
+    cp.putImageData(img, 0, 0);
+    const op = ctx.globalCompositeOperation;
+    const qualite = ctx.imageSmoothingQuality;
+    ctx.globalCompositeOperation = 'copy';
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(petite, 0, 0, l, h);
+    ctx.globalCompositeOperation = op;
+    ctx.imageSmoothingQuality = qualite;
+  } finally {
+    if (petite) petite.width = petite.height = 0;
+  }
+}
